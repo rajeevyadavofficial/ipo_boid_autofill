@@ -9,10 +9,20 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "eas-cli": "^16.3.2",
     "expo": "~52.0.46",
+    "expo-av": "~15.0.2",
     "expo-status-bar": "~2.0.1",
+    "expo-video": "^2.0.6",
+    "ipo-boid-autofill": "file:",
     "react": "18.3.1",
-    "react-native": "0.76.9"
+    "react-native": "0.76.9",
+    "react-native-animatable": "^1.4.0",
+    "react-native-floating-action": "^1.22.0",
+    "react-native-toast-message": "^2.3.0",
+    "react-native-webview": "^13.13.5",
+    "expo-dev-client": "~5.0.20"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
