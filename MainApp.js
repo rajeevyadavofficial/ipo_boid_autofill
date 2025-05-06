@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   popupButton: {
     position: 'absolute',
     right: 20,
-    bottom: 30,
+    bottom: 60,
     backgroundColor: '#6200EE',
     padding: 12,
     borderRadius: 50,

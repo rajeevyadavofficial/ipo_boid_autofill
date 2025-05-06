@@ -2,6 +2,7 @@
   "expo": {
     "name": "ipo-boid-autofill",
     "slug": "ipo-boid-autofill",
+    "icon": "./assets/icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -13,7 +14,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "7cd7e568-84d8-4666-978c-f98e7d4be444"
+        "projectId": "41e9f039-83c5-42e4-a19e-26a8acf96c09"
       }
     }
   }
