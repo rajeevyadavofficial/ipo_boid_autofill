@@ -24,6 +24,10 @@ export default function MainApp() {
   const [nicknameInput, setNicknameInput] = useState('');
   const [savedBoids, setSavedBoids] = useState([]);
   const [editIndex, setEditIndex] = useState(null);
+  const [webUrl, setWebUrl] = useState('https://iporesult.cdsc.com.np/');
+  const [currentUrl, setCurrentUrl] = useState(
+    'https://iporesult.cdsc.com.np/'
+  );
 
   useEffect(() => {
     (async () => {
@@ -129,16 +133,44 @@ export default function MainApp() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <WebView
-        ref={webViewRef}
-        source={{ uri: 'https://iporesult.cdsc.com.np/' }}
-        style={styles.webView}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        mixedContentMode="always" // Allows mixed content (HTTP content over HTTPS)
-        scalesPageToFit={false}
-        injectedJavaScriptBeforeContentLoaded={`(function() {
+    <>
+      <View style={styles.urlBar}>
+        <TextInput
+          value={webUrl}
+          onChangeText={setWebUrl}
+          style={styles.urlInput}
+          placeholder="Enter URL"
+          autoCapitalize="none"
+        />
+        <TouchableOpacity
+          onPress={() => setCurrentUrl(webUrl)}
+          style={styles.goButton}
+        >
+          <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => {
+            const defaultURL = 'https://iporesult.cdsc.com.np/';
+            setWebUrl(defaultURL);
+            setCurrentUrl(defaultURL);
+          }}
+          style={styles.refreshButton}
+        >
+          <Ionicons name="refresh" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      <SafeAreaView style={styles.container}>
+        <WebView
+          ref={webViewRef}
+          source={{ uri: currentUrl }}
+          style={styles.webView}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          mixedContentMode="always" // Allows mixed content (HTTP content over HTTPS)
+          scalesPageToFit={false}
+          injectedJavaScriptBeforeContentLoaded={`(function() {
           var meta = document.createElement('meta');
           meta.name = 'viewport';
           meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
@@ -148,162 +180,158 @@ export default function MainApp() {
           document.documentElement.style.touchAction = 'none';
           document.documentElement.style.msTouchAction = 'none';
         })(); true;`}
-      />
+        />
 
-      {/* Floating Refresh Button */}
-      <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
-        <Ionicons name="reload-outline" size={28} color="#fff" />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.popupButton}
-        onPress={() => setModalVisible(true)}
-      >
-        <Text style={styles.popupButtonText}>☰</Text>
-      </TouchableOpacity>
-
-      <Modal visible={modalVisible} animationType="slide" transparent>
         <TouchableOpacity
-          style={styles.modalContainer}
-          activeOpacity={1}
-          onPressOut={() => {
-            setModalVisible(false);
-            resetForm();
-          }}
+          style={styles.popupButton}
+          onPress={() => setModalVisible(true)}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.modalContent}
-            onPress={() => {}}
-          >
-            <Text style={styles.modalTitle}>
-              {editIndex !== null ? 'Edit BOID' : 'Save or Select BOID'}
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Enter 16-digit BOID starting with 13"
-              keyboardType="numeric"
-              maxLength={16}
-              value={boidInput}
-              onChangeText={setBoidInput}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Enter Nickname (optional)"
-              value={nicknameInput}
-              onChangeText={setNicknameInput}
-            />
-
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={saveOrUpdateBoid}
-            >
-              <Text style={styles.saveButtonText}>
-                {editIndex !== null ? 'Update BOID' : 'Save BOID'}
-              </Text>
-            </TouchableOpacity>
-
-            <FlatList
-              data={savedBoids}
-              keyExtractor={(_, index) => index.toString()}
-              renderItem={({ item, index }) => (
-                <View style={styles.boidCard}>
-                  <TouchableOpacity
-                    onPress={() => fillBoid(item.boid)}
-                    style={{ flex: 1 }}
-                  >
-                    <Text style={styles.nicknameText}>
-                      {item.nickname || 'No nickname'}
-                    </Text>
-                    <Text style={styles.boidCodeText}>{item.boid}</Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.boidActions}>
-                    <TouchableOpacity onPress={() => startEdit(item, index)}>
-                      <Ionicons
-                        name="create-outline"
-                        size={20}
-                        color="#FF9800"
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => deleteBoid(index)}
-                      style={{ marginLeft: 12 }}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={20}
-                        color="#F44336"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            />
-
-            <TouchableOpacity
-              onPress={() => {
-                setModalVisible(false);
-                resetForm();
-              }}
-              style={styles.closeButton}
-            >
-              <Text style={styles.closeText}>Close</Text>
-            </TouchableOpacity>
-
-            <View style={styles.developerContainer}>
-              <Text style={styles.developerText}>
-                Made with ❤️ by Rajeev Yadav
-              </Text>
-              <View style={styles.iconRow}>
-                <TouchableOpacity
-                  onPress={() =>
-                    Linking.openURL('https://github.com/rajeevyadavofficial')
-                  }
-                >
-                  <FontAwesome
-                    name="github"
-                    size={24}
-                    color="#333"
-                    style={styles.icon}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() =>
-                    Linking.openURL(
-                      'https://www.linkedin.com/in/rajeev-yadav-936853259/'
-                    )
-                  }
-                >
-                  <FontAwesome
-                    name="linkedin-square"
-                    size={24}
-                    color="#0077B5"
-                    style={styles.icon}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() =>
-                    Linking.openURL(
-                      'https://www.instagram.com/iiam.rajeev/?hl=en'
-                    )
-                  }
-                >
-                  <FontAwesome
-                    name="instagram"
-                    size={24}
-                    color="#C13584"
-                    style={styles.icon}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
+          <Text style={styles.popupButtonText}>☰</Text>
         </TouchableOpacity>
-      </Modal>
-    </SafeAreaView>
+
+        <Modal visible={modalVisible} animationType="slide" transparent>
+          <TouchableOpacity
+            style={styles.modalContainer}
+            activeOpacity={1}
+            onPressOut={() => {
+              setModalVisible(false);
+              resetForm();
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={styles.modalContent}
+              onPress={() => {}}
+            >
+              <Text style={styles.modalTitle}>
+                {editIndex !== null ? 'Edit BOID' : 'Save or Select BOID'}
+              </Text>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Enter 16-digit BOID starting with 13"
+                keyboardType="numeric"
+                maxLength={16}
+                value={boidInput}
+                onChangeText={setBoidInput}
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Nickname (optional)"
+                value={nicknameInput}
+                onChangeText={setNicknameInput}
+              />
+
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={saveOrUpdateBoid}
+              >
+                <Text style={styles.saveButtonText}>
+                  {editIndex !== null ? 'Update BOID' : 'Save BOID'}
+                </Text>
+              </TouchableOpacity>
+
+              <FlatList
+                data={savedBoids}
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={({ item, index }) => (
+                  <View style={styles.boidCard}>
+                    <TouchableOpacity
+                      onPress={() => fillBoid(item.boid)}
+                      style={{ flex: 1 }}
+                    >
+                      <Text style={styles.nicknameText}>
+                        {item.nickname || 'No nickname'}
+                      </Text>
+                      <Text style={styles.boidCodeText}>{item.boid}</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.boidActions}>
+                      <TouchableOpacity onPress={() => startEdit(item, index)}>
+                        <Ionicons
+                          name="create-outline"
+                          size={20}
+                          color="#FF9800"
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => deleteBoid(index)}
+                        style={{ marginLeft: 12 }}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={20}
+                          color="#F44336"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              />
+
+              <TouchableOpacity
+                onPress={() => {
+                  setModalVisible(false);
+                  resetForm();
+                }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeText}>Close</Text>
+              </TouchableOpacity>
+
+              <View style={styles.developerContainer}>
+                <Text style={styles.developerText}>
+                  Made with ❤️ by Rajeev Yadav
+                </Text>
+                <View style={styles.iconRow}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      Linking.openURL('https://github.com/rajeevyadavofficial')
+                    }
+                  >
+                    <FontAwesome
+                      name="github"
+                      size={24}
+                      color="#333"
+                      style={styles.icon}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() =>
+                      Linking.openURL(
+                        'https://www.linkedin.com/in/rajeev-yadav-936853259/'
+                      )
+                    }
+                  >
+                    <FontAwesome
+                      name="linkedin-square"
+                      size={24}
+                      color="#0077B5"
+                      style={styles.icon}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() =>
+                      Linking.openURL(
+                        'https://www.instagram.com/iiam.rajeev/?hl=en'
+                      )
+                    }
+                  >
+                    <FontAwesome
+                      name="instagram"
+                      size={24}
+                      color="#C13584"
+                      style={styles.icon}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -330,16 +358,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
   },
-  refreshButton: {
-    position: 'absolute',
-    right: 20,
-    top: 60,
-    // backgroundColor: '#28a745',
-    padding: 12,
-    // borderRadius: 50,
-    // elevation: 5,
-    zIndex: 10,
-  },
+
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -423,5 +442,40 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginHorizontal: 6,
+  },
+
+  //////////////
+  urlBar: {
+    position: 'absolute',
+    top: 50,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffffee',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    zIndex: 10,
+    elevation: 5,
+  },
+  urlInput: {
+    flex: 1,
+    height: 40,
+    paddingHorizontal: 8,
+  },
+  goButton: {
+    marginTop: 6,
+    marginBottom: 6,
+    marginLeft: 8,
+    backgroundColor: '#6200EE',
+    padding: 6,
+    borderRadius: 50,
+  },
+
+  refreshButton: {
+    marginLeft: 6,
+    backgroundColor: '#2196F3',
+    padding: 6,
+    borderRadius: 50,
   },
 });
