@@ -121,6 +121,13 @@ export default function MainApp() {
     setEditIndex(index);
   };
 
+  const handleRefresh = () => {
+    if (webViewRef.current) {
+      webViewRef.current.reload(); // Reload the WebView content
+      ToastAndroid.show('Page refreshed', ToastAndroid.SHORT); // Show toast notification
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <WebView
@@ -129,6 +136,7 @@ export default function MainApp() {
         style={styles.webView}
         javaScriptEnabled={true}
         domStorageEnabled={true}
+        mixedContentMode="always" // Allows mixed content (HTTP content over HTTPS)
         scalesPageToFit={false}
         injectedJavaScriptBeforeContentLoaded={`(function() {
           var meta = document.createElement('meta');
@@ -141,6 +149,11 @@ export default function MainApp() {
           document.documentElement.style.msTouchAction = 'none';
         })(); true;`}
       />
+
+      {/* Floating Refresh Button */}
+      <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
+        <Ionicons name="reload-outline" size={28} color="#fff" />
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.popupButton}
@@ -241,7 +254,9 @@ export default function MainApp() {
             </TouchableOpacity>
 
             <View style={styles.developerContainer}>
-              <Text style={styles.developerText}>Made with ❤️ by Rajeev Yadav</Text>
+              <Text style={styles.developerText}>
+                Made with ❤️ by Rajeev Yadav
+              </Text>
               <View style={styles.iconRow}>
                 <TouchableOpacity
                   onPress={() =>
@@ -314,6 +329,16 @@ const styles = StyleSheet.create({
   popupButtonText: {
     color: '#fff',
     fontSize: 22,
+  },
+  refreshButton: {
+    position: 'absolute',
+    right: 20,
+    top: 60,
+    // backgroundColor: '#28a745',
+    padding: 12,
+    // borderRadius: 50,
+    // elevation: 5,
+    zIndex: 10,
   },
   modalContainer: {
     flex: 1,

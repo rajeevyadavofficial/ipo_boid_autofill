@@ -22,7 +22,7 @@
     "react-native-animatable": "^1.4.0",
     "react-native-floating-action": "^1.22.0",
     "react-native-toast-message": "^2.3.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "^13.13.5"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0"

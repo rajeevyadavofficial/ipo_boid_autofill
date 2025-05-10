@@ -10,7 +10,8 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.rajeevy396.ipoboidautofill"
+      "package": "com.rajeevy396.ipoboidautofill",
+      "networkSecurityConfig": "./android/network_security_config.xml"
     },
     "extra": {
       "eas": {
