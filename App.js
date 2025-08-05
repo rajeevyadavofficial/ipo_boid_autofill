@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import SplashScreen from './components/SplashScreen.js'; // Import your SplashScreen
-import MainApp from './MainApp'; // Import your MainApp or WebView screen
+import { View, StyleSheet, StatusBar } from 'react-native';
+import SplashScreen from './components/SplashScreen.js'; 
+
+import MainApp from './components/MainApp/MainApp.js'; 
 
 export default function App() {
   const [isSplashFinished, setIsSplashFinished] = useState(false);
@@ -14,13 +15,16 @@ export default function App() {
   // After splash is finished, show MainApp
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#343a40" />
       <MainApp />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
+    backgroundColor: '#6200EE',
   },
 });
