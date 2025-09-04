@@ -6,19 +6,42 @@ import styles from '../../styles/styles';
 export default function BoidListItem({
   item,
   index,
+  result,
   fillBoid,
   deleteBoid,
   startEdit,
 }) {
+  const isAllotted = result?.toLowerCase().includes('congrat');
+
   return (
-    <View style={styles.boidCard}>
-      <TouchableOpacity onPress={() => fillBoid(item.boid)} style={{ flex: 1 }}>
+    <TouchableOpacity
+      style={styles.boidCard}
+      activeOpacity={0.7}
+      onPress={() => fillBoid(item.boid, index)}
+    >
+      {/* Vertical label */}
+      {result && (
+        <View
+          style={[
+            styles.verticalLabel,
+            { backgroundColor: isAllotted ? 'green' : 'red' },
+          ]}
+        >
+          <Text style={styles.verticalLabelText}>
+            {isAllotted ? 'Alloted!' : 'Not Alloted!'}
+          </Text>
+        </View>
+      )}
+
+      {/* Main content */}
+      <View style={{ flex: 1, paddingLeft: result ? 22 : 0 }}>
         <Text style={styles.nicknameText}>
           {item.nickname || 'No nickname'}
         </Text>
         <Text style={styles.boidCodeText}>{item.boid}</Text>
-      </TouchableOpacity>
+      </View>
 
+      {/* Action buttons */}
       <View style={styles.boidActions}>
         <TouchableOpacity onPress={() => startEdit(item, index)}>
           <Ionicons name="create-outline" size={20} color="#FF9800" />
@@ -30,6 +53,6 @@ export default function BoidListItem({
           <Ionicons name="trash-outline" size={20} color="#F44336" />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
