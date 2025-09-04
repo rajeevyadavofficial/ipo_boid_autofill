@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
-import SplashScreen from './components/SplashScreen.js'; 
+import SplashScreen from './components/SplashScreen.js';
 
-import MainApp from './components/MainApp/MainApp.js'; 
+import MainApp from './screens/MainApp.js';
 
 export default function App() {
   const [isSplashFinished, setIsSplashFinished] = useState(false);
@@ -22,7 +22,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: '#6200EE',

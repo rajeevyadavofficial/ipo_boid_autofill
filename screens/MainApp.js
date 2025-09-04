@@ -6,11 +6,11 @@ import {
   Text,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import WebViewContainer from './WebViewContainer';
-import UrlBar from './UrlBar';
-import BoidModal from './BoidModal';
+import UrlBar from '../components/main/UrlBar';
+import BoidModal from '../components/main/BoidModal';
 // Removed BoidResultModal import
-import styles from './styles';
+import styles from '../styles/styles';
+import WebViewContainer from './../components/main/WebViewContainer';
 
 export default function MainAppV2() {
   const webViewRef = useRef(null);

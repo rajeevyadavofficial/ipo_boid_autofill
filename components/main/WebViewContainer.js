@@ -1,6 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { WebView } from 'react-native-webview';
-import styles from './styles';
+import styles from '../../styles/styles';
 
 const WebViewContainer = forwardRef(
   ({ currentUrl, onResultExtracted }, ref) => {

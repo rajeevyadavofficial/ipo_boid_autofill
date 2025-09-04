@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, TextInput, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import styles from './styles';
+import styles from '../../styles/styles';
 
 export default function UrlBar({ webUrl, setWebUrl, onGoPress, onRefresh }) {
   return (

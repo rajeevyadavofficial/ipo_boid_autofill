@@ -11,7 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
-import styles from './styles';
+import styles from '../../styles/styles';
 
 export default function BoidModal({
   visible,
