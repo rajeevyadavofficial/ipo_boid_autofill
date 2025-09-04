@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   FlatList,
   ToastAndroid,
-  Linking,
 } from 'react-native';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import styles from '../../styles/styles';
 import useBoidModal from '../../hooks/useBoidModal';
 import BoidListItem from './BoidListItem';
+import BoidModalTopBar from './BoidModalTopBar';
+import BoidModalFooter from './BoidModalFooter';
+import BoidModalForm from './BoidModalForm';
+import BoidModalResultMessage from './BoidModalResultMessage';
 
 export default function BoidModal({
   visible,
@@ -57,19 +59,20 @@ export default function BoidModal({
     setCurrentCheckingBoid,
   });
 
-  const renderItem = ({ item, index }) => {
-    const match = results.find((r) => r.boid === item.boid);
-    return (
-      <BoidListItem
-        item={item}
-        index={index}
-        result={match?.result}
-        fillBoid={checkBoidResult}
-        deleteBoid={deleteBoid}
-        startEdit={startEdit}
-      />
-    );
-  };
+const renderItem = ({ item, index }) => {
+  const match = results.find((r) => r.boid === item.boid);
+  return (
+    <BoidListItem
+      item={item}
+      index={index}
+      result={match?.result} // <-- just pass result
+      fillBoid={checkBoidResult}
+      deleteBoid={deleteBoid}
+      startEdit={startEdit}
+    />
+  );
+};
+
 
   const total = savedBoids.length;
   const allotted = results.filter((r) =>
@@ -92,78 +95,25 @@ export default function BoidModal({
           onPress={() => {}}
         >
           {/* Top Bar */}
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              marginBottom: 10,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => setShowForm((prev) => !prev)}
-              style={[styles.saveButton, { flex: 1, marginRight: 5 }]}
-            >
-              <Text style={styles.saveButtonText}>
-                {showForm ? 'Cancel' : 'Add BOID'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setResults([]);
-                ToastAndroid.show('Results cleared', ToastAndroid.SHORT);
-              }}
-              style={[
-                styles.saveButton,
-                { backgroundColor: '#F44336', flex: 1, marginLeft: 5 },
-              ]}
-            >
-              <Text style={styles.saveButtonText}>Clear Results</Text>
-            </TouchableOpacity>
-          </View>
+          <BoidModalTopBar
+            showForm={showForm}
+            setShowForm={setShowForm}
+            setResults={setResults}
+          />
 
           {/* Congratulation or Sorry Message */}
-          {results.length > 0 && total > 0 && (
-            <Text
-              style={{
-                textAlign: 'center',
-                fontWeight: 'bold',
-                marginBottom: 10,
-                color: allotted > 0 ? 'green' : 'red',
-              }}
-            >
-              {allotted > 0
-                ? `🎉 Congratulations ${allotted}/${total} allotted !`
-                : `😔 Sorry ${allotted}/${total} allotted !`}
-            </Text>
-          )}
+          <BoidModalResultMessage results={results} total={total} />
 
           {/* Input Form */}
           {showForm && (
-            <>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter 16-digit BOID starting with 13"
-                keyboardType="numeric"
-                maxLength={16}
-                value={boidInput}
-                onChangeText={setBoidInput}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Nickname (optional)"
-                value={nicknameInput}
-                onChangeText={setNicknameInput}
-              />
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={saveOrUpdateBoid}
-              >
-                <Text style={styles.saveButtonText}>
-                  {editIndex !== null ? 'Update BOID' : 'Save BOID'}
-                </Text>
-              </TouchableOpacity>
-            </>
+            <BoidModalForm
+              boidInput={boidInput}
+              nicknameInput={nicknameInput}
+              setBoidInput={setBoidInput}
+              setNicknameInput={setNicknameInput}
+              saveOrUpdateBoid={saveOrUpdateBoid}
+              editIndex={editIndex}
+            />
           )}
 
           {/* List of Saved BOIDs */}
@@ -174,51 +124,7 @@ export default function BoidModal({
           />
 
           {/* Footer / Developer Info */}
-          <View style={styles.developerContainer}>
-            <Text style={styles.developerText}>
-              Made with ❤️ by Er. Rajeev Yadav
-            </Text>
-            <View style={styles.iconRow}>
-              <TouchableOpacity
-                onPress={() =>
-                  Linking.openURL('https://github.com/rajeevyadavofficial')
-                }
-              >
-                <FontAwesome
-                  name="github"
-                  size={24}
-                  color="#333"
-                  style={styles.icon}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() =>
-                  Linking.openURL(
-                    'https://www.linkedin.com/in/rajeev-yadav-936853259/'
-                  )
-                }
-              >
-                <FontAwesome
-                  name="linkedin-square"
-                  size={24}
-                  color="#0077B5"
-                  style={styles.icon}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() =>
-                  Linking.openURL('https://www.instagram.com/iiam.rajeev/')
-                }
-              >
-                <FontAwesome
-                  name="instagram"
-                  size={24}
-                  color="#C13584"
-                  style={styles.icon}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <BoidModalFooter />
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>

@@ -1,3 +1,4 @@
+// components/main/BoidListItem.js
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,7 +42,7 @@ export default function BoidListItem({
         <Text style={styles.boidCodeText}>{item.boid}</Text>
       </View>
 
-      {/* Action buttons */}
+      {/* Actions */}
       <View style={styles.boidActions}>
         <TouchableOpacity onPress={() => startEdit(item, index)}>
           <Ionicons name="create-outline" size={20} color="#FF9800" />
