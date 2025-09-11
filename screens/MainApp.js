@@ -1,18 +1,16 @@
+// screens/MainApp.js
 import React, { useRef, useState, useEffect } from 'react';
-import {
-  SafeAreaView,
-  ToastAndroid,
-  TouchableOpacity,
-  Text,
-} from 'react-native';
+import { View, ToastAndroid, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import UrlBar from '../components/main/UrlBar';
 import BoidModal from '../components/main/BoidModal';
-// Removed BoidResultModal import
+import WebViewContainer from '../components/main/WebViewContainer';
+import BottomNavBar from '../components/main/BottomNavBar';
+import DeveloperSidebar from '../components/main/DeveloperSidebar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import styles from '../styles/styles';
-import WebViewContainer from './../components/main/WebViewContainer';
 
-export default function MainAppV2() {
+export default function MainApp() {
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -20,15 +18,14 @@ export default function MainAppV2() {
   const [nicknameInput, setNicknameInput] = useState('');
   const [savedBoids, setSavedBoids] = useState([]);
   const [editIndex, setEditIndex] = useState(null);
-  const [webUrl, setWebUrl] = useState('https://iporesult.cdsc.com.np/');
+  const [developerVisible, setDeveloperVisible] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(
     'https://iporesult.cdsc.com.np/'
   );
-
-  // Result tracking states
-  const [results, setResults] = useState([]); // { boid, nickname, result }
+  const [results, setResults] = useState([]);
   const [currentCheckingBoid, setCurrentCheckingBoid] = useState(null);
 
+  // Load saved BOIDs
   useEffect(() => {
     (async () => {
       const data = await AsyncStorage.getItem('savedBoids');
@@ -47,21 +44,9 @@ export default function MainAppV2() {
     setEditIndex(null);
   };
 
-  const handleRefresh = () => {
-    webViewRef.current?.reload();
-    ToastAndroid.show('Page refreshed', ToastAndroid.SHORT);
-  };
-
-  const handleGoPress = () => {
-    setCurrentUrl(webUrl);
-  };
-
-  // Called from WebView on result extraction after user taps Capture Result
   const handleResultExtracted = (resultText) => {
     if (!currentCheckingBoid) return;
-
     setResults((prevResults) => {
-      // Replace existing result for same BOID or add new
       const index = prevResults.findIndex(
         (item) => item.boid === currentCheckingBoid.boid
       );
@@ -79,37 +64,33 @@ export default function MainAppV2() {
         },
       ];
     });
-
     setCurrentCheckingBoid(null);
     ToastAndroid.show('Result received', ToastAndroid.SHORT);
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* <UrlBar
-        webUrl={webUrl}
-        setWebUrl={setWebUrl}
-        onGoPress={handleGoPress}
-        onRefresh={handleRefresh}
-      /> */}
-
+    <View style={{ flex: 1, backgroundColor: '#343a40' }}>
+      {/* WebView */}
       <WebViewContainer
         ref={webViewRef}
         currentUrl={currentUrl}
         onResultExtracted={handleResultExtracted}
       />
 
-      {/* ☰ Button to open BOID Modal */}
-      <TouchableOpacity
-        style={styles.popupButton}
-        onPress={() => setModalVisible(true)}
+      {/* Bottom Navigation Bar */}
+      <View
+        style={[localStyles.bottomNavWrapper, { paddingBottom: insets.bottom }]}
       >
-        <Text style={styles.popupButtonText}>☰</Text>
-      </TouchableOpacity>
+        <BottomNavBar
+          onOpenBoidModal={() => setModalVisible(true)}
+          onOpenUpcomingIpos={() =>
+            ToastAndroid.show('Upcoming IPOs coming soon!', ToastAndroid.SHORT)
+          }
+          onOpenDeveloperInfo={() => setDeveloperVisible(true)}
+        />
+      </View>
 
-      {/* Removed Check Results button and modal */}
-
-      {/* BOID Modal (Form + List + Results + Clear Results) */}
+      {/* BOID Modal */}
       <BoidModal
         visible={modalVisible}
         setVisible={setModalVisible}
@@ -128,6 +109,21 @@ export default function MainAppV2() {
         setResults={setResults}
         setCurrentCheckingBoid={setCurrentCheckingBoid}
       />
-    </SafeAreaView>
+
+      {/* Developer Sidebar */}
+      <DeveloperSidebar
+        visible={developerVisible}
+        onClose={() => setDeveloperVisible(false)}
+      />
+    </View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  bottomNavWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+});

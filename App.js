@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
-import SplashScreen from './components/SplashScreen.js';
+import { SafeAreaProvider } from 'react-native-safe-area-context'; // ✅ import
 
+import SplashScreen from './components/SplashScreen.js';
 import MainApp from './screens/MainApp.js';
 
 export default function App() {
@@ -12,12 +13,14 @@ export default function App() {
     return <SplashScreen onFinish={() => setIsSplashFinished(true)} />;
   }
 
-  // After splash is finished, show MainApp
+  // After splash is finished, wrap everything in SafeAreaProvider
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#343a40" />
-      <MainApp />
-    </View>
+    <SafeAreaProvider>
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#343a40" />
+        <MainApp />
+      </View>
+    </SafeAreaProvider>
   );
 }
 
