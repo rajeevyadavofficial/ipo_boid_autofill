@@ -59,20 +59,19 @@ export default function BoidModal({
     setCurrentCheckingBoid,
   });
 
-const renderItem = ({ item, index }) => {
-  const match = results.find((r) => r.boid === item.boid);
-  return (
-    <BoidListItem
-      item={item}
-      index={index}
-      result={match?.result} // <-- just pass result
-      fillBoid={checkBoidResult}
-      deleteBoid={deleteBoid}
-      startEdit={startEdit}
-    />
-  );
-};
-
+  const renderItem = ({ item, index }) => {
+    const match = results.find((r) => r.boid === item.boid);
+    return (
+      <BoidListItem
+        item={item}
+        index={index}
+        result={match?.result} // <-- just pass result
+        fillBoid={checkBoidResult}
+        deleteBoid={deleteBoid}
+        startEdit={startEdit}
+      />
+    );
+  };
 
   const total = savedBoids.length;
   const allotted = results.filter((r) =>

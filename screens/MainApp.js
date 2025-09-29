@@ -2,10 +2,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { View, ToastAndroid, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import BoidModal from '../components/main/BoidModal';
+import BoidModal from '../components/boid/BoidModal';
 import WebViewContainer from '../components/main/WebViewContainer';
-import BottomNavBar from '../components/main/BottomNavBar';
-import DeveloperSidebar from '../components/main/DeveloperSidebar';
+import BottomNavBar from '../components/navigation/BottomNavBar';
+import DeveloperSidebar from '../components/developer/DeveloperSidebar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import styles from '../styles/styles';
 
