@@ -6,19 +6,49 @@ import BoidModal from '../components/boid/BoidModal';
 import WebViewContainer from '../components/main/WebViewContainer';
 import BottomNavBar from '../components/navigation/BottomNavBar';
 import DeveloperSidebar from '../components/developer/DeveloperSidebar';
+import UpcomingIposScreen from './upcomingIpos/UpcomingIposScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import styles from '../styles/styles';
+
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export default function MainApp() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
+  
+  const { expoPushToken } = usePushNotifications();
+
+  // Register token with backend
+  useEffect(() => {
+    if (expoPushToken) {
+      const registerToken = async () => {
+        try {
+          // Use local IP for testing
+          const API_URL = 'http://192.168.16.102:3000/api/notifications/register';
+          await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: expoPushToken }),
+          });
+          console.log('✅ Token sent to backend');
+        } catch (error) {
+          console.error('❌ Failed to send token to backend:', error);
+        }
+      };
+      registerToken();
+    }
+  }, [expoPushToken]);
 
   const [modalVisible, setModalVisible] = useState(false);
+  // ... rest of state
   const [boidInput, setBoidInput] = useState('');
   const [nicknameInput, setNicknameInput] = useState('');
   const [savedBoids, setSavedBoids] = useState([]);
   const [editIndex, setEditIndex] = useState(null);
   const [developerVisible, setDeveloperVisible] = useState(false);
+  const [showUpcomingIpos, setShowUpcomingIpos] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(
     'https://iporesult.cdsc.com.np/'
   );
@@ -71,21 +101,33 @@ export default function MainApp() {
   return (
     <View style={{ flex: 1, backgroundColor: '#343a40' }}>
       {/* WebView */}
-      <WebViewContainer
-        ref={webViewRef}
-        currentUrl={currentUrl}
-        onResultExtracted={handleResultExtracted}
-      />
+      <View style={{ flex: 1, display: showUpcomingIpos ? 'none' : 'flex' }}>
+        <WebViewContainer
+          ref={webViewRef}
+          currentUrl={currentUrl}
+          onResultExtracted={handleResultExtracted}
+        />
+      </View>
+
+      {/* Upcoming IPOs Screen */}
+      {showUpcomingIpos && (
+        <View style={{ flex: 1, paddingBottom: 80 }}>
+          <UpcomingIposScreen />
+        </View>
+      )}
 
       {/* Bottom Navigation Bar */}
       <View
         style={[localStyles.bottomNavWrapper, { paddingBottom: insets.bottom }]}
       >
         <BottomNavBar
-          onOpenBoidModal={() => setModalVisible(true)}
-          onOpenUpcomingIpos={() =>
-            ToastAndroid.show('Upcoming IPOs coming soon!', ToastAndroid.SHORT)
-          }
+          onOpenBoidModal={() => {
+            if (showUpcomingIpos) {
+              setShowUpcomingIpos(false);
+            }
+            setModalVisible(true);
+          }}
+          onOpenUpcomingIpos={() => setShowUpcomingIpos(!showUpcomingIpos)}
           onOpenDeveloperInfo={() => setDeveloperVisible(true)}
         />
       </View>
