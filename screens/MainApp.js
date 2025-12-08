@@ -24,7 +24,7 @@ export default function MainApp() {
       const registerToken = async () => {
         try {
           // Use local IP for testing
-          const API_URL = 'http://192.168.16.102:3000/api/notifications/register';
+          const API_URL = 'https://ipo-backend-d8nv.onrender.com/api/notifications/register';
           await fetch(API_URL, {
             method: 'POST',
             headers: {
