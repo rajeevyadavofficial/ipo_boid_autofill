@@ -15,6 +15,7 @@ import BoidModalTopBar from './BoidModalTopBar';
 import BoidModalFooter from './BoidModalFooter';
 import BoidModalForm from './BoidModalForm';
 import BoidModalResultMessage from './BoidModalResultMessage';
+import GoogleSignIn from '../GoogleSignIn';
 
 export default function BoidModal({
   visible,
@@ -121,6 +122,9 @@ export default function BoidModal({
             keyExtractor={(_, index) => index.toString()}
             renderItem={renderItem}
           />
+
+          {/* Google Sign-In for Cloud Backup */}
+          <GoogleSignIn />
 
           {/* Footer / Developer Info */}
           <BoidModalFooter />
