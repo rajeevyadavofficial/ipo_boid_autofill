@@ -80,7 +80,8 @@ export default function GoogleSignIn({ onSignInSuccess }) {
       console.log('✅ Signed in successfully');
     } catch (error) {
       console.error('Sign-in error:', error);
-      alert('Sign-in failed. Please try again.');
+      const errorMessage = error.message || JSON.stringify(error);
+      alert(`Sign-in failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1029543580064",
+    "project_id": "ipo-boid-app",
+    "storage_bucket": "ipo-boid-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1029543580064:android:32590787ca78e7fa8754c5",
+        "android_client_info": {
+          "package_name": "com.rajeevy396.ipoboidautofill"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1029543580064-0tp9epc16rki3fdms3tl1kj8cg96u5h3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpWlhMWRU3PG4_tuDOnVL49WedYXM87Rc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1029543580064-0tp9epc16rki3fdms3tl1kj8cg96u5h3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

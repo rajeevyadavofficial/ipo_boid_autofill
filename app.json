@@ -10,7 +10,8 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.rajeevy396.ipoboidautofill"
+      "package": "com.rajeevy396.ipoboidautofill",
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "eas": {
