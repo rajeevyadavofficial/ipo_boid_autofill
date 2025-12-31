@@ -1,6 +1,8 @@
 // hooks/useBoidModal.js
 import { useState, useEffect } from 'react';
 import { Alert, ToastAndroid } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useBoidSync } from './useBoidSync';
 
 export default function useBoidModal({
   visible,
@@ -20,6 +22,20 @@ export default function useBoidModal({
   setCurrentCheckingBoid,
 }) {
   const [showForm, setShowForm] = useState(false);
+  const { syncToCloud } = useBoidSync();
+
+  // Helper to sync BOIDs to cloud if user is signed in
+  const syncIfSignedIn = async (boidList) => {
+    try {
+      const userData = await AsyncStorage.getItem('googleUser');
+      if (userData) {
+        const user = JSON.parse(userData);
+        await syncToCloud(boidList, user.googleId);
+      }
+    } catch (error) {
+      console.error('Error syncing to cloud:', error);
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -55,6 +71,7 @@ export default function useBoidModal({
             const updated = [...savedBoids];
             updated[editIndex] = entry;
             await saveBoidsToStorage(updated);
+            await syncIfSignedIn(updated);
             ToastAndroid.show('BOID updated', ToastAndroid.SHORT);
             resetForm();
             setShowForm(false);
@@ -64,6 +81,7 @@ export default function useBoidModal({
     } else {
       const updated = [...savedBoids, entry];
       await saveBoidsToStorage(updated);
+      await syncIfSignedIn(updated);
       ToastAndroid.show('BOID saved', ToastAndroid.SHORT);
       resetForm();
       setShowForm(false);
@@ -101,6 +119,7 @@ export default function useBoidModal({
           const updated = [...savedBoids];
           updated.splice(index, 1);
           await saveBoidsToStorage(updated);
+          await syncIfSignedIn(updated);
           ToastAndroid.show('Deleted', ToastAndroid.SHORT);
         },
       },
