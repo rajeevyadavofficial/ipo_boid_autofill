@@ -37,7 +37,7 @@ export const useBoidSync = () => {
     const merged = [...cloudBoids];
     
     localBoids.forEach(localBoid => {
-      const exists = merged.some(b => b.boidNumber === localBoid.boidNumber);
+      const exists = merged.some(b => b.boid === localBoid.boid);
       if (!exists) {
         merged.push(localBoid);
       }
