@@ -33,8 +33,10 @@ export default function MainApp() {
             body: JSON.stringify({ token: expoPushToken }),
           });
           console.log('✅ Token sent to backend');
+          ToastAndroid.show('🔔 Notifications Registered!', ToastAndroid.SHORT);
         } catch (error) {
           console.error('❌ Failed to send token to backend:', error);
+          ToastAndroid.show('❌ Notification Registration Failed', ToastAndroid.LONG);
         }
       };
       registerToken();
