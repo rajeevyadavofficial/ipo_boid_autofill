@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, ToastAndroid } from 'react-native';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBoidSync } from '../hooks/useBoidSync';
@@ -36,13 +36,16 @@ export default function GoogleSignIn({ onSignInSuccess }) {
   const handleSignIn = async () => {
     try {
       setLoading(true);
+      ToastAndroid.show('Checking Play Services...', ToastAndroid.SHORT);
       
       // Check if Google Play Services are available
       await GoogleSignin.hasPlayServices();
       
+      ToastAndroid.show('Opening Google Sign-In...', ToastAndroid.SHORT);
       // Sign in
       const userInfo = await GoogleSignin.signIn();
       
+      ToastAndroid.show('Verifying with backend...', ToastAndroid.SHORT);
       // Get ID token
       const tokens = await GoogleSignin.getTokens();
       
@@ -70,6 +73,7 @@ export default function GoogleSignIn({ onSignInSuccess }) {
       await AsyncStorage.setItem('googleUser', JSON.stringify(userData));
       setUser(userData);
 
+      ToastAndroid.show('Syncing data...', ToastAndroid.SHORT);
       // Perform full sync
       await fullSync(userData.googleId);
 
@@ -77,10 +81,12 @@ export default function GoogleSignIn({ onSignInSuccess }) {
         onSignInSuccess(userData);
       }
 
+      ToastAndroid.show('✅ Signed in!', ToastAndroid.SHORT);
       console.log('✅ Signed in successfully');
     } catch (error) {
       console.error('Sign-in error:', error);
       const errorMessage = error.message || JSON.stringify(error);
+      ToastAndroid.show(`❌ Sign-in error: ${errorMessage}`, ToastAndroid.LONG);
       alert(`Sign-in failed: ${errorMessage}`);
     } finally {
       setLoading(false);
