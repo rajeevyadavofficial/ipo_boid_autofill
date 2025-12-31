@@ -20,7 +20,8 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-video"
+      "expo-video",
+      "expo-notifications"
     ]
   }
 }
