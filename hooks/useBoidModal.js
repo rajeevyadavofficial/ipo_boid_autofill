@@ -31,11 +31,16 @@ export default function useBoidModal({
       if (userData) {
         const user = JSON.parse(userData);
         ToastAndroid.show('☁️ Syncing...', ToastAndroid.SHORT);
-        await syncToCloud(boidList, user.googleId);
+        const result = await syncToCloud(boidList, user.googleId);
+        if (result.success) {
+          ToastAndroid.show('✅ Synced to cloud', ToastAndroid.SHORT);
+        } else {
+          ToastAndroid.show(`❌ Sync failed: ${result.error}`, ToastAndroid.LONG);
+        }
       }
     } catch (error) {
       console.error('Error syncing to cloud:', error);
-      ToastAndroid.show('❌ Sync failed', ToastAndroid.SHORT);
+      ToastAndroid.show(`❌ Sync failed: ${error.message}`, ToastAndroid.LONG);
     }
   };
 

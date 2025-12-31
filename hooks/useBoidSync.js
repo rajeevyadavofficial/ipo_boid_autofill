@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { ToastAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CryptoJS from 'crypto-js';
 
@@ -112,7 +113,7 @@ export const useBoidSync = () => {
   const fullSync = useCallback(async (googleId) => {
     try {
       // Get local BOIDs
-      const localData = await AsyncStorage.getItem('boidList');
+      const localData = await AsyncStorage.getItem('savedBoids');
       const localBoids = localData ? JSON.parse(localData) : [];
 
       // Get cloud BOIDs
@@ -126,7 +127,7 @@ export const useBoidSync = () => {
       const mergedBoids = mergeBoidData(localBoids, cloudResult.boidList);
 
       // Save merged data locally
-      await AsyncStorage.setItem('boidList', JSON.stringify(mergedBoids));
+      await AsyncStorage.setItem('savedBoids', JSON.stringify(mergedBoids));
 
       // Upload merged data to cloud
       const uploadResult = await syncToCloud(mergedBoids, googleId);
