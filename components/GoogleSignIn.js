@@ -75,10 +75,10 @@ export default function GoogleSignIn({ onSignInSuccess }) {
 
       ToastAndroid.show('Syncing data...', ToastAndroid.SHORT);
       // Perform full sync
-      await fullSync(userData.googleId);
+      const syncResult = await fullSync(userData.googleId);
 
       if (onSignInSuccess) {
-        onSignInSuccess(userData);
+        onSignInSuccess(userData, syncResult.boidList);
       }
 
       ToastAndroid.show('✅ Signed in!', ToastAndroid.SHORT);

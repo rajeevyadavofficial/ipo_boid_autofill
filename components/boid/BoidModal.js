@@ -124,7 +124,13 @@ export default function BoidModal({
           />
 
           {/* Google Sign-In for Cloud Backup */}
-          <GoogleSignIn />
+          <GoogleSignIn 
+            onSignInSuccess={(user, boidList) => {
+              if (boidList) {
+                setSavedBoids(boidList);
+              }
+            }}
+          />
 
           {/* Footer / Developer Info */}
           <BoidModalFooter />

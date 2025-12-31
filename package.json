@@ -30,6 +30,7 @@
     "react-native": "0.81.5",
     "react-native-animatable": "^1.4.0",
     "react-native-floating-action": "^1.22.0",
+    "react-native-get-random-values": "^2.0.0",
     "react-native-qrcode-svg": "^6.3.15",
     "react-native-safe-area-context": "^5.6.1",
     "react-native-svg": "15.12.1",
