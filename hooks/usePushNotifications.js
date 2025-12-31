@@ -38,35 +38,28 @@ export const usePushNotifications = () => {
       }
 
       if (Device.isDevice) {
-        ToastAndroid.show('Checking Permissions...', ToastAndroid.SHORT);
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
         if (existingStatus !== 'granted') {
-          ToastAndroid.show('Requesting Permissions...', ToastAndroid.SHORT);
           const { status } = await Notifications.requestPermissionsAsync();
           finalStatus = status;
         }
         if (finalStatus !== 'granted') {
-          ToastAndroid.show('❌ Permission Denied', ToastAndroid.SHORT);
           console.log('Failed to get push token for push notification!');
           return;
         }
         
         // Get the token
-        ToastAndroid.show('Fetching Expo Token...', ToastAndroid.SHORT);
         token = (await Notifications.getExpoPushTokenAsync({
-          projectId: '41e9f039-83c5-42e4-a19e-26a8acf96c09', // Added projectId from app.json
+          projectId: '41e9f039-83c5-42e4-a19e-26a8acf96c09',
         })).data;
         
         console.log('Expo Push Token:', token);
       } else {
-        ToastAndroid.show('Must use physical device', ToastAndroid.SHORT);
         console.log('Must use physical device for Push Notifications');
       }
     } catch (error) {
-      ToastAndroid.show(`❌ Registration failed: ${error.message}`, ToastAndroid.LONG);
       console.warn('Push notification registration failed:', error.message);
-      // Return null or handle gracefully
       return null;
     }
 
