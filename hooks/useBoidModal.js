@@ -30,17 +30,10 @@ export default function useBoidModal({
       const userData = await AsyncStorage.getItem('googleUser');
       if (userData) {
         const user = JSON.parse(userData);
-        ToastAndroid.show('☁️ Syncing...', ToastAndroid.SHORT);
-        const result = await syncToCloud(boidList, user.googleId);
-        if (result.success) {
-          ToastAndroid.show('✅ Synced to cloud', ToastAndroid.SHORT);
-        } else {
-          ToastAndroid.show(`❌ Sync failed: ${result.error}`, ToastAndroid.LONG);
-        }
+        await syncToCloud(boidList, user.googleId);
       }
     } catch (error) {
       console.error('Error syncing to cloud:', error);
-      ToastAndroid.show(`❌ Sync failed: ${error.message}`, ToastAndroid.LONG);
     }
   };
 
