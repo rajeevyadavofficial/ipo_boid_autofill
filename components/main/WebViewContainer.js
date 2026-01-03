@@ -19,7 +19,8 @@ const WebViewContainer = forwardRef(
 
     const checkBlockCode = `
       (function() {
-        if (document.title === "Request Rejected" || document.body.innerText.includes("Request Rejected")) {
+        const bodyText = document.body.innerText;
+        if (document.title === "Request Rejected" || bodyText.includes("Request Rejected") || bodyText.includes("Connection failed")) {
           window.ReactNativeWebView.postMessage("WAF_BLOCK");
         }
       })();
@@ -78,11 +79,14 @@ const WebViewContainer = forwardRef(
           ref={webViewRef}
           source={{ uri: currentUrl }}
           style={styles.webView}
-          javaScriptEnabled
-          domStorageEnabled
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
           mixedContentMode="always"
           scalesPageToFit={false}
           userAgent="Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+          cacheEnabled={true}
+          sharedCookiesEnabled={true}
+          thirdPartyCookiesEnabled={true}
           onLoadStart={() => {
             setLoading(true);
             setError(false);
