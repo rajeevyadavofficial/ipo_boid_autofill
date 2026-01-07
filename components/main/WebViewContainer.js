@@ -1,14 +1,18 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import styles from '../../styles/styles';
+import strategyManager from '../../utils/WebViewStrategies';
 
 const WebViewContainer = forwardRef(
   ({ currentUrl, onResultExtracted }, ref) => {
     const webViewRef = useRef();
     const [error, setError] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [userAgent, setUserAgent] = useState('');
+    const [webViewConfig, setWebViewConfig] = useState({ cacheEnabled: false, incognito: true });
+    const [retryKey, setRetryKey] = useState(0);
 
     useImperativeHandle(ref, () => ({
       reload: () => webViewRef.current?.reload(),
@@ -16,6 +20,35 @@ const WebViewContainer = forwardRef(
         webViewRef.current?.injectJavaScript(script);
       },
     }));
+
+    // Initialize User-Agent and config on mount
+    useEffect(() => {
+      const initializeStrategy = async () => {
+        const ua = await strategyManager.getUserAgent();
+        const config = strategyManager.getWebViewConfig();
+        setUserAgent(ua);
+        setWebViewConfig(config);
+        console.log('🎯 [Strategy] Initialized:', strategyManager.getCurrentStrategyInfo());
+      };
+      initializeStrategy();
+    }, []);
+
+    // Handle retry with new strategy
+    const handleRetry = async () => {
+      const canRetry = strategyManager.switchToNextStrategy();
+      
+      if (canRetry) {
+        const ua = await strategyManager.getUserAgent();
+        const config = strategyManager.getWebViewConfig();
+        setUserAgent(ua);
+        setWebViewConfig(config);
+        setError(false);
+        setRetryKey(prev => prev + 1); // Force WebView reload
+        console.log('🔄 [Strategy] Retrying with new strategy');
+      } else {
+        console.log('❌ [Strategy] All retry attempts exhausted');
+      }
+    };
 
     const checkBlockCode = `
       (function() {
@@ -78,26 +111,36 @@ const WebViewContainer = forwardRef(
       true;
     `;
 
-    const renderErrorView = () => (
-      <View style={{ flex: 1, backgroundColor: '#343a40', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Ionicons name="cloud-offline-outline" size={64} color="#6200EE" />
-        <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold', marginTop: 20, textAlign: 'center' }}>
-          CDSC Server Busy
-        </Text>
-        <Text style={{ color: '#aaa', fontSize: 14, marginTop: 10, textAlign: 'center', lineHeight: 20 }}>
-          The CDSC website is currently rejecting requests or is under heavy load. Please try again.
-        </Text>
-        <TouchableOpacity 
-          style={{ backgroundColor: '#6200EE', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25, marginTop: 30 }}
-          onPress={() => {
-            setError(false);
-            webViewRef.current?.reload();
-          }}
-        >
-          <Text style={{ color: 'white', fontWeight: 'bold' }}>Refresh Page</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    const renderErrorView = () => {
+      const strategyInfo = strategyManager.getCurrentStrategyInfo();
+      const canRetry = strategyInfo.retryCount < strategyInfo.maxRetries;
+      
+      return (
+        <View style={{ flex: 1, backgroundColor: '#343a40', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Ionicons name="cloud-offline-outline" size={64} color="#6200EE" />
+          <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold', marginTop: 20, textAlign: 'center' }}>
+            {canRetry ? 'Retrying Connection...' : 'CDSC Server Busy'}
+          </Text>
+          <Text style={{ color: '#aaa', fontSize: 14, marginTop: 10, textAlign: 'center', lineHeight: 20 }}>
+            {canRetry 
+              ? `Trying different approach (${strategyInfo.retryCount}/${strategyInfo.maxRetries})...`
+              : 'The CDSC website is currently rejecting requests. Please try again later.'}
+          </Text>
+          {!canRetry && (
+            <TouchableOpacity 
+              style={{ backgroundColor: '#6200EE', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25, marginTop: 30 }}
+              onPress={() => {
+                strategyManager.resetStrategy();
+                setError(false);
+                setRetryKey(prev => prev + 1);
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Again</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    };
 
     return (
       <View style={{ flex: 1 }}>
@@ -121,9 +164,10 @@ const WebViewContainer = forwardRef(
           domStorageEnabled={true}
           mixedContentMode="always"
           scalesPageToFit={false}
-          userAgent="Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-          cacheEnabled={false}
-          incognito={true}
+          userAgent={userAgent || "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"}
+          cacheEnabled={webViewConfig.cacheEnabled}
+          incognito={webViewConfig.incognito}
+          key={retryKey}
           sharedCookiesEnabled={true}
           thirdPartyCookiesEnabled={true}
           allowsInlineMediaPlayback={true}
@@ -163,8 +207,11 @@ const WebViewContainer = forwardRef(
               if (data.type === 'WAF_BLOCK') {
                 console.error('🚫 [WebView] WAF Block detected:', data);
                 setError(true);
+                // Auto-retry with different strategy
+                setTimeout(() => handleRetry(), 1500);
               } else if (data.type === 'PAGE_LOADED') {
                 console.log('✅ [WebView] Page loaded successfully:', data.title);
+                strategyManager.resetStrategy();
               } else if (data.type === 'SCRIPT_ERROR') {
                 console.error('⚠️ [WebView] Script error:', data.error);
               }
