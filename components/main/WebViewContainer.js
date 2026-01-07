@@ -19,9 +19,35 @@ const WebViewContainer = forwardRef(
 
     const checkBlockCode = `
       (function() {
-        const bodyText = document.body.innerText;
-        if (document.title === "Request Rejected" || bodyText.includes("Request Rejected") || bodyText.includes("Connection failed")) {
-          window.ReactNativeWebView.postMessage("WAF_BLOCK");
+        try {
+          // Diagnostic logging
+          console.log('[CDSC Debug] Page loaded, checking for errors...');
+          console.log('[CDSC Debug] Document title:', document.title);
+          console.log('[CDSC Debug] Body text length:', document.body.innerText.length);
+          
+          const bodyText = document.body.innerText;
+          
+          // Check for error messages
+          if (document.title === "Request Rejected" || bodyText.includes("Request Rejected") || bodyText.includes("Connection failed")) {
+            console.log('[CDSC Debug] Error detected:', bodyText.substring(0, 200));
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'WAF_BLOCK',
+              title: document.title,
+              bodyPreview: bodyText.substring(0, 500)
+            }));
+          } else {
+            console.log('[CDSC Debug] Page loaded successfully');
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'PAGE_LOADED',
+              title: document.title
+            }));
+          }
+        } catch (e) {
+          console.error('[CDSC Debug] Error in checkBlockCode:', e);
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'SCRIPT_ERROR',
+            error: e.message
+          }));
         }
       })();
       true;
@@ -77,35 +103,84 @@ const WebViewContainer = forwardRef(
       <View style={{ flex: 1 }}>
         <WebView
           ref={webViewRef}
-          source={{ uri: currentUrl }}
+          source={{
+            uri: currentUrl,
+            headers: {
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Accept-Encoding': 'gzip, deflate, br',
+              'Referer': 'https://iporesult.cdsc.com.np/',
+              'Sec-Fetch-Dest': 'document',
+              'Sec-Fetch-Mode': 'navigate',
+              'Sec-Fetch-Site': 'same-origin',
+              'Upgrade-Insecure-Requests': '1'
+            }
+          }}
           style={styles.webView}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           mixedContentMode="always"
           scalesPageToFit={false}
-          userAgent="Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
-          cacheEnabled={true}
+          userAgent="Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+          cacheEnabled={false}
+          incognito={true}
           sharedCookiesEnabled={true}
           thirdPartyCookiesEnabled={true}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
           onLoadStart={() => {
+            console.log('🔄 [WebView] Load started:', currentUrl);
             setLoading(true);
             setError(false);
           }}
+          onLoadProgress={({ nativeEvent }) => {
+            console.log('📊 [WebView] Load progress:', nativeEvent.progress);
+          }}
           onLoadEnd={() => {
+            console.log('✅ [WebView] Load ended');
             setLoading(false);
             webViewRef.current.injectJavaScript(checkBlockCode);
             webViewRef.current.injectJavaScript(injectionCode);
           }}
-          onError={() => setError(true)}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('❌ [WebView] Error:', nativeEvent);
+            setError(true);
+          }}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('🌐 [WebView] HTTP Error:', nativeEvent.statusCode, nativeEvent.description);
+          }}
           renderError={renderErrorView}
           onMessage={(event) => {
-            const data = event.nativeEvent.data;
-            if (data === "WAF_BLOCK") {
-              setError(true);
-            } else {
-              console.log('📨 Result from WebView:', data);
-              onResultExtracted?.(data);
+            const rawData = event.nativeEvent.data;
+            console.log('📨 [WebView] Message received:', rawData);
+            
+            try {
+              const data = JSON.parse(rawData);
+              console.log('📨 [WebView] Parsed message:', data);
+              
+              if (data.type === 'WAF_BLOCK') {
+                console.error('🚫 [WebView] WAF Block detected:', data);
+                setError(true);
+              } else if (data.type === 'PAGE_LOADED') {
+                console.log('✅ [WebView] Page loaded successfully:', data.title);
+              } else if (data.type === 'SCRIPT_ERROR') {
+                console.error('⚠️ [WebView] Script error:', data.error);
+              }
+            } catch (e) {
+              // Legacy string messages (result extraction)
+              if (rawData === "WAF_BLOCK") {
+                setError(true);
+              } else {
+                console.log('📨 [WebView] Result:', rawData);
+                onResultExtracted?.(rawData);
+              }
             }
+          }}
+          onShouldStartLoadWithRequest={(request) => {
+            console.log('🔗 [WebView] Navigation request:', request.url);
+            return true;
           }}
         />
         {loading && !error && (
