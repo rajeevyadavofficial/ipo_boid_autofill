@@ -11,6 +11,8 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-firebase/app": "^23.8.3",
+    "@react-native-firebase/remote-config": "^23.8.3",
     "@react-native-google-signin/google-signin": "^16.0.0",
     "crypto-js": "^4.2.0",
     "eas-cli": "^16.28.0",

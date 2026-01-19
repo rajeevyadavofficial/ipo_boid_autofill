@@ -4,12 +4,14 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBoidSync } from '../hooks/useBoidSync';
 
-const API_URL = 'https://ipo-backend-d8nv.onrender.com/api';
+import { getApiBaseUrl } from '../utils/config';
 
 export default function GoogleSignIn({ onSignInSuccess }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const { fullSync, syncing } = useBoidSync();
+  
+  const API_URL = getApiBaseUrl();
 
   useEffect(() => {
     // Configure Google Sign-In

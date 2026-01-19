@@ -8,6 +8,7 @@ import BottomNavBar from '../components/navigation/BottomNavBar';
 import DeveloperSidebar from '../components/developer/DeveloperSidebar';
 import UpcomingIposScreen from './upcomingIpos/UpcomingIposScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getApiBaseUrl } from '../utils/config';
 import styles from '../styles/styles';
 
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -23,8 +24,8 @@ export default function MainApp() {
     if (expoPushToken) {
       const registerToken = async () => {
         try {
-          // Use local IP for testing
-          const API_URL = 'https://ipo-backend-d8nv.onrender.com/api/notifications/register';
+          // Use dynamic URL
+          const API_URL = `${getApiBaseUrl()}/notifications/register`;
           await fetch(API_URL, {
             method: 'POST',
             headers: {

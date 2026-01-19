@@ -3,10 +3,13 @@ import { ToastAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CryptoJS from 'crypto-js';
 
-const API_URL = 'https://ipo-backend-d8nv.onrender.com/api';
+import { getApiBaseUrl } from '../utils/config';
 
 export const useBoidSync = () => {
   const [syncing, setSyncing] = useState(false);
+  
+  // Get URL dynamically
+  const API_URL = getApiBaseUrl();
   const [syncError, setSyncError] = useState(null);
 
   // Encrypt BOID data using AES-256

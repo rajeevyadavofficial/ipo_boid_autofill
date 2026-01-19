@@ -3,7 +3,7 @@
     "name": "ipo-boid-autofill",
     "slug": "ipo-boid-autofill",
     "icon": "./assets/icon.png",
-    "version": "1.0.2",
+    "version": "1.0.5",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
@@ -12,7 +12,7 @@
     "android": {
       "package": "com.rajeevy396.ipoboidautofill",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 9
+      "versionCode": 12
     },
     "extra": {
       "eas": {

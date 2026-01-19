@@ -11,10 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const API_BASE_URL = 'https://ipo-backend-d8nv.onrender.com/api';
+import { getApiBaseUrl } from '../../utils/config';
 
 export default function UpcomingIposScreen() {
   const insets = useSafeAreaInsets();
+  const API_BASE_URL = getApiBaseUrl();
   const [ipos, setIpos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
