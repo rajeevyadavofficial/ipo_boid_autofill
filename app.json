@@ -3,7 +3,7 @@
     "name": "ipo-boid-autofill",
     "slug": "ipo-boid-autofill",
     "icon": "./assets/icon.png",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
@@ -12,7 +12,7 @@
     "android": {
       "package": "com.rajeevy396.ipoboidautofill",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 12
+      "versionCode": 13
     },
     "extra": {
       "eas": {
@@ -23,6 +23,11 @@
       "expo-asset",
       "expo-video",
       "expo-notifications"
-    ]
+    ],
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#343a40"
+    }
   }
 }
