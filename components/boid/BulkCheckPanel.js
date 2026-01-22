@@ -50,7 +50,12 @@ export default function BulkCheckPanel({
       const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/api/admin/ipos?status=Open`);
       const data = await response.json();
-      setOpenIPOs(data);
+      if (data.success && Array.isArray(data.data)) {
+        setOpenIPOs(data.data);
+      } else {
+        console.error('Invalid IPO data format:', data);
+        setOpenIPOs([]);
+      }
     } catch (error) {
       console.error('Error fetching open IPOs:', error);
     } finally {
