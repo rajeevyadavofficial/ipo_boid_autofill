@@ -13,6 +13,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getApiBaseUrl } from '../../utils/config';
 
+import { adToBs, nepaliMonths } from '../../utils/dateConverter';
+
+const formatBSDate = (adDate) => {
+  const bs = adToBs(new Date(adDate));
+  if (!bs) return '';
+  return `${bs.year}-${nepaliMonths[bs.month - 1].substring(0, 3)}-${bs.day.toString().padStart(2, '0')}`;
+};
+
+const formatADDate = (adDate) => {
+  const date = new Date(adDate);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTime = (adDate) => {
+  return new Date(adDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+};
+
 export default function UpcomingIposScreen() {
   const insets = useSafeAreaInsets();
   const API_BASE_URL = getApiBaseUrl();
@@ -152,10 +169,10 @@ export default function UpcomingIposScreen() {
             </View>
           )}
         </View>
-        <Text style={styles.typeText}>{item.type}</Text>
       </View>
       
       <Text style={styles.companyName}>{item.company}</Text>
+      <Text style={styles.typeText}>{item.type}</Text>
       
       <View style={styles.detailsContainer}>
         <View style={styles.detailRow}>
@@ -167,15 +184,19 @@ export default function UpcomingIposScreen() {
           <Text style={styles.detailValue}>{item.price}</Text>
         </View>
         <View style={styles.divider} />
-        <View style={styles.dateRow}>
-          <View>
+        <View style={styles.dateSection}>
+          <View style={styles.dateColumn}>
             <Text style={styles.dateLabel}>Opening</Text>
-            <Text style={styles.dateValue}>{new Date(item.openingDate).toLocaleDateString()} {new Date(item.openingDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
+            <Text style={styles.dateValueAD}>{formatADDate(item.openingDate)}</Text>
+            <Text style={styles.dateValueBS}>{formatBSDate(item.openingDate)} BS</Text>
+            <Text style={styles.timeValue}>{formatTime(item.openingDate)}</Text>
           </View>
-          <Ionicons name="arrow-forward" size={16} color="#ccc" />
-          <View>
+          <Ionicons name="arrow-forward" size={20} color="#6200EE" style={styles.arrowIcon} />
+          <View style={styles.dateColumn}>
             <Text style={styles.dateLabel}>Closing</Text>
-            <Text style={styles.dateValue}>{new Date(item.closingDate).toLocaleDateString()} {new Date(item.closingDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
+            <Text style={styles.dateValueAD}>{formatADDate(item.closingDate)}</Text>
+            <Text style={styles.dateValueBS}>{formatBSDate(item.closingDate)} BS</Text>
+            <Text style={styles.timeValue}>{formatTime(item.closingDate)}</Text>
           </View>
         </View>
       </View>
@@ -353,15 +374,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   typeText: {
-    fontSize: 12,
-    color: '#888',
-    fontWeight: '500',
+    fontSize: 13,
+    color: '#6200EE',
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
   },
   companyName: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
+    color: '#222',
+    marginBottom: 4,
+    lineHeight: 24,
   },
   detailsContainer: {
     backgroundColor: '#f9f9f9',
@@ -384,23 +408,43 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#eee',
-    marginVertical: 8,
+    backgroundColor: '#ddd',
+    marginVertical: 12,
   },
-  dateRow: {
+  dateSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  dateColumn: {
+    flex: 1,
+  },
+  arrowIcon: {
+    marginHorizontal: 12,
+  },
   dateLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#888',
+    marginBottom: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  dateValueAD: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
     marginBottom: 2,
   },
-  dateValue: {
+  dateValueBS: {
     fontSize: 12,
+    color: '#6200EE',
     fontWeight: '600',
-    color: '#333',
+    marginBottom: 2,
+  },
+  timeValue: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
   emptyContainer: {
     alignItems: 'center',
