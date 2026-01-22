@@ -7,8 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Share,
-  Modal,
-  FlatList,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { generateBulkCheckScript, reloadForFreshCaptcha, extractIPOListFromWebsite } from '../../utils/BulkCheckStrategy';
@@ -30,60 +29,17 @@ export default function BulkCheckPanel({
 
   const [openIPOs, setOpenIPOs] = useState([]);
   const [selectedIPO, setSelectedIPO] = useState(null);
-  const [showIPOSelector, setShowIPOSelector] = useState(false);
-  const [loadingIPOs, setLoadingIPOs] = useState(false);
+  const [ipoNameInput, setIpoNameInput] = useState(''); // Simple text input
 
   const messageHandlerRef = useRef(null);
 
-  // Fetch open IPOs from the website's dropdown (not from database)
+  // Set selected IPO if provided via props
   useEffect(() => {
-    if (!ipoName && visible && webViewRef.current) {
-      fetchIPOsFromWebsite();
-    } else if (ipoName) {
+    if (ipoName) {
       setSelectedIPO({ company: ipoName });
+      setIpoNameInput(ipoName);
     }
-  }, [ipoName, visible]);
-
-  const fetchIPOsFromWebsite = () => {
-    setLoadingIPOs(true);
-    
-    // Inject script to extract IPO list from website
-    const script = extractIPOListFromWebsite();
-    webViewRef.current?.injectJavaScript(script);
-    
-    // Set up listener for the result
-    const handleMessage = (event) => {
-      try {
-        const data = JSON.parse(event.nativeEvent.data);
-        
-        if (data.type === 'IPO_LIST_RESULT') {
-          if (data.success && Array.isArray(data.companies)) {
-            console.log('✅ Extracted', data.companies.length, 'IPOs from website');
-            // Convert company names to objects
-            const ipoList = data.companies.map(name => ({ company: name }));
-            setOpenIPOs(ipoList);
-            setLoadingIPOs(false);
-            
-            if (data.companies.length === 0) {
-              alert('No IPOs found on the website dropdown.');
-            }
-          } else {
-            console.error('❌ Failed to extract IPOs:', data.error);
-            alert(`Failed to load IPO list: ${data.error}`);
-            setOpenIPOs([]);
-            setLoadingIPOs(false);
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing WebView message:', error);
-      }
-    };
-    
-    // Attach message handler
-    if (webViewRef.current) {
-      webViewRef.current.onMessage = handleMessage;
-    }
-  };
+  }, [ipoName]);
 
   const handleBulkCheck = async () => {
     if (savedBoids.length === 0) {
@@ -91,10 +47,9 @@ export default function BulkCheckPanel({
       return;
     }
 
-    const targetIPO = ipoName || selectedIPO?.company;
+    const targetIPO = ipoName || ipoNameInput.trim();
     if (!targetIPO) {
-      alert('Please select an IPO first');
-      setShowIPOSelector(true);
+      alert('Please enter the IPO company name');
       return;
     }
 
@@ -234,64 +189,22 @@ export default function BulkCheckPanel({
 
   return (
     <View style={styles.container}>
-      {/* IPO Selector (if no IPO pre-selected) */}
+      {/* Simple IPO Name Input (if no IPO pre-selected) */}
       {!ipoName && !bulkCheckState.isChecking && bulkCheckState.results.length === 0 && (
-        <View style={styles.ipoSelectorContainer}>
-          <Text style={styles.ipoSelectorLabel}>Select IPO to check:</Text>
-          <TouchableOpacity 
-            style={styles.ipoSelectorButton}
-            onPress={() => setShowIPOSelector(true)}
-          >
-            <Text style={styles.ipoSelectorText}>
-              {selectedIPO ? selectedIPO.company : 'Tap to select IPO'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#666" />
-          </TouchableOpacity>
+        <View style={styles.ipoInputContainer}>
+          <Text style={styles.ipoInputLabel}>Enter IPO Company Name:</Text>
+          <TextInput
+            style={styles.ipoInput}
+            placeholder="e.g., VIJAYA LAGHUBITTA"
+            value={ipoNameInput}
+            onChangeText={setIpoNameInput}
+            autoCapitalize="characters"
+          />
+          <Text style={styles.ipoInputHint}>
+            💡 Tip: Copy the exact name from the IPO result website
+          </Text>
         </View>
       )}
-
-      {/* IPO Selector Modal */}
-      <Modal
-        visible={showIPOSelector}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowIPOSelector(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Open IPO</Text>
-              <TouchableOpacity onPress={() => setShowIPOSelector(false)}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            {loadingIPOs ? (
-              <ActivityIndicator size="large" color="#6200EE" style={{marginTop: 20}} />
-            ) : (
-              <FlatList
-                data={openIPOs}
-                keyExtractor={(item) => item._id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.ipoItem}
-                    onPress={() => {
-                      setSelectedIPO(item);
-                      setShowIPOSelector(false);
-                    }}
-                  >
-                    <Text style={styles.ipoItemText}>{item.company}</Text>
-                    <Text style={styles.ipoItemSubtext}>{item.type}</Text>
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text style={styles.emptyText}>No open IPOs available</Text>
-                }
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
 
       {/* Bulk Check Button */}
       {!bulkCheckState.isChecking && bulkCheckState.results.length === 0 && (
@@ -518,72 +431,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  // IPO Selector styles
-  ipoSelectorContainer: {
+  // Simple IPO Input styles
+  ipoInputContainer: {
     marginBottom: 12,
   },
-  ipoSelectorLabel: {
+  ipoInputLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
     marginBottom: 8,
   },
-  ipoSelectorButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  ipoInput: {
     backgroundColor: '#f5f5f5',
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
-  },
-  ipoSelectorText: {
     fontSize: 14,
     color: '#333',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '70%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  ipoItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  ipoItemText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  ipoItemSubtext: {
+  ipoInputHint: {
     fontSize: 12,
     color: '#666',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    marginTop: 20,
-    fontSize: 14,
+    marginTop: 6,
+    fontStyle: 'italic',
   },
 });
