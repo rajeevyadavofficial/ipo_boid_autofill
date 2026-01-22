@@ -146,3 +146,62 @@ window.location.reload();
 true; // Return true to indicate reload initiated
 `;
 };
+
+/**
+ * Extract list of available IPOs from the website's dropdown
+ * @returns {string} - JavaScript code to extract IPO list
+ */
+export const extractIPOListFromWebsite = () => {
+  return `
+(function() {
+  try {
+    // Click the ng-select to open the dropdown
+    const ngSelect = document.querySelector('#companyShare');
+    if (!ngSelect) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'IPO_LIST_RESULT',
+        success: false,
+        error: 'Company dropdown not found'
+      }));
+      return;
+    }
+
+    const input = ngSelect.querySelector('input');
+    input.focus();
+    input.click();
+
+    // Wait a bit for the dropdown to populate
+    setTimeout(() => {
+      const options = document.querySelectorAll('.ng-option');
+      
+      if (options.length === 0) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'IPO_LIST_RESULT',
+          success: false,
+          error: 'No IPOs found in dropdown'
+        }));
+        return;
+      }
+
+      // Extract company names from all options
+      const companies = Array.from(options).map(opt => opt.innerText.trim());
+      
+      // Close the dropdown
+      document.querySelector('.ng-clear-wrapper')?.click();
+      
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'IPO_LIST_RESULT',
+        success: true,
+        companies: companies
+      }));
+    }, 1000);
+  } catch (error) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'IPO_LIST_RESULT',
+      success: false,
+      error: error.message
+    }));
+  }
+})();
+`;
+};

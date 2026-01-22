@@ -11,7 +11,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { generateBulkCheckScript, reloadForFreshCaptcha } from '../../utils/BulkCheckStrategy';
+import { generateBulkCheckScript, reloadForFreshCaptcha, extractIPOListFromWebsite } from '../../utils/BulkCheckStrategy';
 import { getApiBaseUrl } from '../../utils/config';
 
 export default function BulkCheckPanel({ 
@@ -35,44 +35,53 @@ export default function BulkCheckPanel({
 
   const messageHandlerRef = useRef(null);
 
-  // Fetch open IPOs if no IPO is pre-selected
+  // Fetch open IPOs from the website's dropdown (not from database)
   useEffect(() => {
-    if (!ipoName && visible) {
-      fetchOpenIPOs();
+    if (!ipoName && visible && webViewRef.current) {
+      fetchIPOsFromWebsite();
     } else if (ipoName) {
       setSelectedIPO({ company: ipoName });
     }
   }, [ipoName, visible]);
 
-  const fetchOpenIPOs = async () => {
+  const fetchIPOsFromWebsite = () => {
     setLoadingIPOs(true);
-    try {
-      const API_URL = getApiBaseUrl();
-      console.log('🔍 Fetching IPOs from:', `${API_URL}/api/admin/ipos?status=Open`);
-      
-      const response = await fetch(`${API_URL}/api/admin/ipos?status=Open`);
-      console.log('📡 Response status:', response.status);
-      
-      const data = await response.json();
-      console.log('📦 Response data:', data);
-      
-      if (data.success && Array.isArray(data.data)) {
-        console.log('✅ Found', data.data.length, 'Open IPOs');
-        setOpenIPOs(data.data);
+    
+    // Inject script to extract IPO list from website
+    const script = extractIPOListFromWebsite();
+    webViewRef.current?.injectJavaScript(script);
+    
+    // Set up listener for the result
+    const handleMessage = (event) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
         
-        if (data.data.length === 0) {
-          alert('No Open IPOs found in database. Please add some IPOs in the Admin app first.');
+        if (data.type === 'IPO_LIST_RESULT') {
+          if (data.success && Array.isArray(data.companies)) {
+            console.log('✅ Extracted', data.companies.length, 'IPOs from website');
+            // Convert company names to objects
+            const ipoList = data.companies.map(name => ({ company: name }));
+            setOpenIPOs(ipoList);
+            setLoadingIPOs(false);
+            
+            if (data.companies.length === 0) {
+              alert('No IPOs found on the website dropdown.');
+            }
+          } else {
+            console.error('❌ Failed to extract IPOs:', data.error);
+            alert(`Failed to load IPO list: ${data.error}`);
+            setOpenIPOs([]);
+            setLoadingIPOs(false);
+          }
         }
-      } else {
-        console.error('❌ Invalid IPO data format:', data);
-        alert(`Error: Invalid response format from server. Check console.`);
-        setOpenIPOs([]);
+      } catch (error) {
+        console.error('Error parsing WebView message:', error);
       }
-    } catch (error) {
-      console.error('❌ Error fetching open IPOs:', error);
-      alert(`Failed to fetch IPOs: ${error.message}\n\nMake sure backend is running!`);
-    } finally {
-      setLoadingIPOs(false);
+    };
+    
+    // Attach message handler
+    if (webViewRef.current) {
+      webViewRef.current.onMessage = handleMessage;
     }
   };
 
