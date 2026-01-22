@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,12 @@ import {
   ScrollView,
   StyleSheet,
   Share,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { generateBulkCheckScript, reloadForFreshCaptcha } from '../../utils/BulkCheckStrategy';
+import { getApiBaseUrl } from '../../utils/config';
 
 export default function BulkCheckPanel({ 
   savedBoids, 
@@ -25,7 +28,35 @@ export default function BulkCheckPanel({
     summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0 }
   });
 
+  const [openIPOs, setOpenIPOs] = useState([]);
+  const [selectedIPO, setSelectedIPO] = useState(null);
+  const [showIPOSelector, setShowIPOSelector] = useState(false);
+  const [loadingIPOs, setLoadingIPOs] = useState(false);
+
   const messageHandlerRef = useRef(null);
+
+  // Fetch open IPOs if no IPO is pre-selected
+  useEffect(() => {
+    if (!ipoName && visible) {
+      fetchOpenIPOs();
+    } else if (ipoName) {
+      setSelectedIPO({ company: ipoName });
+    }
+  }, [ipoName, visible]);
+
+  const fetchOpenIPOs = async () => {
+    setLoadingIPOs(true);
+    try {
+      const API_URL = getApiBaseUrl();
+      const response = await fetch(`${API_URL}/api/admin/ipos?status=Open`);
+      const data = await response.json();
+      setOpenIPOs(data);
+    } catch (error) {
+      console.error('Error fetching open IPOs:', error);
+    } finally {
+      setLoadingIPOs(false);
+    }
+  };
 
   const handleBulkCheck = async () => {
     if (savedBoids.length === 0) {
@@ -33,8 +64,10 @@ export default function BulkCheckPanel({
       return;
     }
 
-    if (!ipoName) {
-      alert('IPO name not available');
+    const targetIPO = ipoName || selectedIPO?.company;
+    if (!targetIPO) {
+      alert('Please select an IPO first');
+      setShowIPOSelector(true);
       return;
     }
 
@@ -65,7 +98,7 @@ export default function BulkCheckPanel({
       }
 
       // Inject check script
-      const script = generateBulkCheckScript(ipoName, boid);
+      const script = generateBulkCheckScript(targetIPO, boid);
       webViewRef.current?.injectJavaScript(script);
 
       // Wait for result
@@ -174,6 +207,65 @@ export default function BulkCheckPanel({
 
   return (
     <View style={styles.container}>
+      {/* IPO Selector (if no IPO pre-selected) */}
+      {!ipoName && !bulkCheckState.isChecking && bulkCheckState.results.length === 0 && (
+        <View style={styles.ipoSelectorContainer}>
+          <Text style={styles.ipoSelectorLabel}>Select IPO to check:</Text>
+          <TouchableOpacity 
+            style={styles.ipoSelectorButton}
+            onPress={() => setShowIPOSelector(true)}
+          >
+            <Text style={styles.ipoSelectorText}>
+              {selectedIPO ? selectedIPO.company : 'Tap to select IPO'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* IPO Selector Modal */}
+      <Modal
+        visible={showIPOSelector}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowIPOSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Open IPO</Text>
+              <TouchableOpacity onPress={() => setShowIPOSelector(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingIPOs ? (
+              <ActivityIndicator size="large" color="#6200EE" style={{marginTop: 20}} />
+            ) : (
+              <FlatList
+                data={openIPOs}
+                keyExtractor={(item) => item._id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.ipoItem}
+                    onPress={() => {
+                      setSelectedIPO(item);
+                      setShowIPOSelector(false);
+                    }}
+                  >
+                    <Text style={styles.ipoItemText}>{item.company}</Text>
+                    <Text style={styles.ipoItemSubtext}>{item.type}</Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <Text style={styles.emptyText}>No open IPOs available</Text>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Bulk Check Button */}
       {!bulkCheckState.isChecking && bulkCheckState.results.length === 0 && (
         <TouchableOpacity 
@@ -398,5 +490,73 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  // IPO Selector styles
+  ipoSelectorContainer: {
+    marginBottom: 12,
+  },
+  ipoSelectorLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  ipoSelectorButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  ipoSelectorText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  ipoItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  ipoItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  ipoItemSubtext: {
+    fontSize: 12,
+    color: '#666',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 20,
+    fontSize: 14,
   },
 });
