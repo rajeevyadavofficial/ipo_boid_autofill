@@ -107,7 +107,6 @@ export default function UpcomingIposScreen() {
         const now = new Date();
         const close = new Date(closingDate);
         // Set to 5 PM (17:00)
-        close.setHours(17, 0, 0, 0);
 
         const diff = close - now;
 
@@ -171,12 +170,12 @@ export default function UpcomingIposScreen() {
         <View style={styles.dateRow}>
           <View>
             <Text style={styles.dateLabel}>Opening</Text>
-            <Text style={styles.dateValue}>{item.openingDate}</Text>
+            <Text style={styles.dateValue}>{new Date(item.openingDate).toLocaleDateString()} {new Date(item.openingDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
           </View>
           <Ionicons name="arrow-forward" size={16} color="#ccc" />
           <View>
             <Text style={styles.dateLabel}>Closing</Text>
-            <Text style={styles.dateValue}>{item.closingDate}</Text>
+            <Text style={styles.dateValue}>{new Date(item.closingDate).toLocaleDateString()} {new Date(item.closingDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
           </View>
         </View>
       </View>
