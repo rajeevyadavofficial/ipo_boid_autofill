@@ -205,3 +205,72 @@ export const extractIPOListFromWebsite = () => {
 })();
 `;
 };
+
+/**
+ * Extract company list from Angular's internal state (includes IDs)
+ * This is the CORRECT way - gets the actual data with company IDs
+ * @returns {string} - JavaScript code to extract company data with IDs
+ */
+export const extractCompanyListFromAngular = () => {
+  return `
+(function() {
+  try {
+    const el = document.querySelector('#companyShare');
+    if (!el) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'COMPANY_LIST_RESULT',
+        success: false,
+        error: 'Dropdown element not found'
+      }));
+      return;
+    }
+
+    const context = el.__ngContext__;
+    if (!context) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'COMPANY_LIST_RESULT',
+        success: false,
+        error: 'Angular context not found - page may not be fully loaded'
+      }));
+      return;
+    }
+
+    // Find the company array in the Angular context
+    let companies = null;
+    for (const item of context) {
+      if (Array.isArray(item) && item.length > 10 && item[0]?.id && item[0]?.name) {
+        companies = item;
+        break;
+      }
+    }
+
+    if (!companies) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'COMPANY_LIST_RESULT',
+        success: false,
+        error: 'Company data not found in Angular state'
+      }));
+      return;
+    }
+
+    // Return the company data with IDs
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'COMPANY_LIST_RESULT',
+      success: true,
+      companies: companies.map(c => ({
+        id: c.id,
+        name: c.name,
+        scrip: c.scrip || ''
+      }))
+    }));
+  } catch (error) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'COMPANY_LIST_RESULT',
+      success: false,
+      error: error.message
+    }));
+  }
+})();
+`;
+};
+
