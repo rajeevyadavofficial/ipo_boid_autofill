@@ -48,16 +48,29 @@ export default function BulkCheckPanel({
     setLoadingIPOs(true);
     try {
       const API_URL = getApiBaseUrl();
+      console.log('🔍 Fetching IPOs from:', `${API_URL}/api/admin/ipos?status=Open`);
+      
       const response = await fetch(`${API_URL}/api/admin/ipos?status=Open`);
+      console.log('📡 Response status:', response.status);
+      
       const data = await response.json();
+      console.log('📦 Response data:', data);
+      
       if (data.success && Array.isArray(data.data)) {
+        console.log('✅ Found', data.data.length, 'Open IPOs');
         setOpenIPOs(data.data);
+        
+        if (data.data.length === 0) {
+          alert('No Open IPOs found in database. Please add some IPOs in the Admin app first.');
+        }
       } else {
-        console.error('Invalid IPO data format:', data);
+        console.error('❌ Invalid IPO data format:', data);
+        alert(`Error: Invalid response format from server. Check console.`);
         setOpenIPOs([]);
       }
     } catch (error) {
-      console.error('Error fetching open IPOs:', error);
+      console.error('❌ Error fetching open IPOs:', error);
+      alert(`Failed to fetch IPOs: ${error.message}\n\nMake sure backend is running!`);
     } finally {
       setLoadingIPOs(false);
     }
