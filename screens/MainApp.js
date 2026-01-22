@@ -55,6 +55,7 @@ export default function MainApp() {
   );
   const [results, setResults] = useState([]);
   const [currentCheckingBoid, setCurrentCheckingBoid] = useState(null);
+  const [currentIPO, setCurrentIPO] = useState(null); // Track current IPO for bulk check
 
   // Load saved BOIDs
   useEffect(() => {
@@ -113,7 +114,13 @@ export default function MainApp() {
       {/* Upcoming IPOs Screen */}
       {showUpcomingIpos && (
         <View style={{ flex: 1, paddingBottom: 80 }}>
-          <UpcomingIposScreen />
+          <UpcomingIposScreen 
+            onSelectIPO={(ipo) => {
+              setCurrentIPO(ipo);
+              setModalVisible(true);
+              setShowUpcomingIpos(false);
+            }}
+          />
         </View>
       )}
 
@@ -151,6 +158,7 @@ export default function MainApp() {
         results={results}
         setResults={setResults}
         setCurrentCheckingBoid={setCurrentCheckingBoid}
+        ipoName={currentIPO?.company} // Pass current IPO name
       />
 
       {/* Developer Sidebar */}

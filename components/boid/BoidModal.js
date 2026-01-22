@@ -16,6 +16,7 @@ import BoidModalFooter from './BoidModalFooter';
 import BoidModalForm from './BoidModalForm';
 import BoidModalResultMessage from './BoidModalResultMessage';
 import GoogleSignIn from '../GoogleSignIn';
+import BulkCheckPanel from './BulkCheckPanel';
 
 export default function BoidModal({
   visible,
@@ -34,6 +35,7 @@ export default function BoidModal({
   results,
   setResults,
   setCurrentCheckingBoid,
+  ipoName, // Add ipoName prop
 }) {
   const {
     showForm,
@@ -103,6 +105,14 @@ export default function BoidModal({
 
           {/* Congratulation or Sorry Message */}
           <BoidModalResultMessage results={results} total={total} />
+
+          {/* Bulk Check Panel */}
+          <BulkCheckPanel 
+            savedBoids={savedBoids}
+            ipoName={ipoName}
+            webViewRef={webViewRef}
+            visible={visible}
+          />
 
           {/* Input Form */}
           {showForm && (

@@ -30,7 +30,7 @@ const formatTime = (adDate) => {
   return new Date(adDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 };
 
-export default function UpcomingIposScreen() {
+export default function UpcomingIposScreen({ onSelectIPO }) {
   const insets = useSafeAreaInsets();
   const API_BASE_URL = getApiBaseUrl();
   const [ipos, setIpos] = useState([]);
@@ -156,7 +156,11 @@ export default function UpcomingIposScreen() {
   };
 
   const renderItem = ({ item }) => (
-    <View style={styles.card}>
+    <TouchableOpacity 
+      style={styles.card}
+      onPress={() => onSelectIPO?.(item)}
+      activeOpacity={0.7}
+    >
       <View style={styles.cardHeader}>
         <View style={styles.headerLeft}>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
@@ -200,8 +204,9 @@ export default function UpcomingIposScreen() {
           </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
+
 
 
   const getStatusColor = (status) => {
