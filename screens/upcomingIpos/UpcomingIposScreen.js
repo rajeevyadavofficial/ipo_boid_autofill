@@ -22,11 +22,9 @@ export default function UpcomingIposScreen() {
   const [activeTab, setActiveTab] = useState('Open'); // Open, Upcoming, Closed
   const [sortAscending, setSortAscending] = useState(true);
 
-
-
   const fetchIpos = async () => {
     try {
-      // Fetch IPOs for the active tab
+
       const type = activeTab.toLowerCase();
       const response = await fetch(`${API_BASE_URL}/ipos?type=${type}`);
       
@@ -184,6 +182,7 @@ export default function UpcomingIposScreen() {
       </View>
     </View>
   );
+
 
   const getStatusColor = (status) => {
     switch (status) {

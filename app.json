@@ -12,7 +12,7 @@
     "android": {
       "package": "com.rajeevy396.ipoboidautofill",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 13
+      "versionCode": 14
     },
     "extra": {
       "eas": {

@@ -7,10 +7,13 @@ const defaultConfig = {
 
 export const initRemoteConfig = async () => {
   try {
+    await remoteConfig().setConfigSettings({
+      minimumFetchIntervalMillis: 0,
+    });
+    
     await remoteConfig().setDefaults(defaultConfig);
     
     // Fetch and activate values from the cloud
-    // We use a small fetch interval for dev/testing, but increase it for prod
     await remoteConfig().fetchAndActivate();
     
     console.log('✅ Remote Config fetched and activated');
