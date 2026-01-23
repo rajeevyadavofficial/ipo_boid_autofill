@@ -207,63 +207,53 @@ export const extractIPOListFromWebsite = () => {
 };
 
 /**
- * Extract company list from Angular's internal state (includes IDs)
- * This is the CORRECT way - gets the actual data with company IDs
- * @returns {string} - JavaScript code to extract company data with IDs
+ * Fetch company list directly from the IPO result API
+ * This is the MOST RELIABLE way - calls the endpoint directly
+ * @returns {string} - JavaScript code to fetch company data
  */
-export const extractCompanyListFromAngular = () => {
+export const fetchIPOsDirectly = () => {
   return `
-(function() {
+(async function() {
   try {
-    const el = document.querySelector('#companyShare');
-    if (!el) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'COMPANY_LIST_RESULT',
-        success: false,
-        error: 'Dropdown element not found'
-      }));
-      return;
-    }
-
-    const context = el.__ngContext__;
-    if (!context) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'COMPANY_LIST_RESULT',
-        success: false,
-        error: 'Angular context not found - page may not be fully loaded'
-      }));
-      return;
-    }
-
-    // Find the company array in the Angular context
-    let companies = null;
-    for (const item of context) {
-      if (Array.isArray(item) && item.length > 10 && item[0]?.id && item[0]?.name) {
-        companies = item;
-        break;
+    console.log('🔄 Fetching company list from API...');
+    
+    const response = await fetch('https://iporesult.cdsc.com.np/result/companyShares/fileUploaded', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
       }
+    });
+
+    if (!response.ok) {
+      throw new Error('API request failed with status ' + response.status);
     }
 
-    if (!companies) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'COMPANY_LIST_RESULT',
-        success: false,
-        error: 'Company data not found in Angular state'
-      }));
-      return;
+    const data = await response.json();
+    
+    if (!Array.isArray(data)) {
+      throw new Error('Invalid API response format');
     }
 
-    // Return the company data with IDs
-    window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'COMPANY_LIST_RESULT',
-      success: true,
-      companies: companies.map(c => ({
+    // Filter valid companies and map to our format
+    const companies = data
+      .filter(c => c.id && c.name)
+      .map(c => ({
         id: c.id,
         name: c.name,
         scrip: c.scrip || ''
-      }))
+      }));
+
+    console.log('✅ Fetched ' + companies.length + ' companies');
+
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'COMPANY_LIST_RESULT',
+      success: true,
+      companies: companies
     }));
+
   } catch (error) {
+    console.error('❌ Fetch failed:', error.message);
     window.ReactNativeWebView.postMessage(JSON.stringify({
       type: 'COMPANY_LIST_RESULT',
       success: false,

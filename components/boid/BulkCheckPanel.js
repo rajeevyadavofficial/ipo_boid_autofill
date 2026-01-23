@@ -11,7 +11,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { generateBulkCheckScript, reloadForFreshCaptcha, extractCompanyListFromAngular } from '../../utils/BulkCheckStrategy';
+import { generateBulkCheckScript, reloadForFreshCaptcha, fetchIPOsDirectly } from '../../utils/BulkCheckStrategy';
 import { getApiBaseUrl } from '../../utils/config';
 
 export default function BulkCheckPanel({ 
@@ -49,11 +49,11 @@ export default function BulkCheckPanel({
   const extractCompaniesFromWebView = () => {
     setLoadingCompanies(true);
     
-    // Wait for page to fully load (Angular needs time)
+    // Wait for page to be ready (shorter delay for API fetch)
     setTimeout(() => {
-      const script = extractCompanyListFromAngular();
+      const script = fetchIPOsDirectly();
       webViewRef.current?.injectJavaScript(script);
-    }, 3000); // Give Angular 3 seconds to load
+    }, 1500); 
   };
 
   // Handle messages from WebView
