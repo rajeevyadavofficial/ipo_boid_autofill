@@ -11,85 +11,51 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { generateBulkCheckScript, reloadForFreshCaptcha, fetchIPOsDirectly } from '../../utils/BulkCheckStrategy';
+import { 
+  generateCaptchaExtractionScript, 
+  generateFinalSubmissionScript,
+  reloadForFreshCaptcha, 
+  fetchIPOsDirectly 
+} from '../../utils/BulkCheckStrategy';
 import { getApiBaseUrl } from '../../utils/config';
 
 export default function BulkCheckPanel({ 
   savedBoids, 
   ipoName, 
   webViewRef,
-  visible 
+  visible,
+  onModeChange,
+  onWebViewMessage // The setter function from MainApp
 }) {
+  const [viewMode, setViewMode] = useState('selection'); // 'selection' | 'checking' | 'results'
+
+  // Notify parent when viewMode changes
+  useEffect(() => {
+    onModeChange?.(viewMode);
+  }, [viewMode, onModeChange]);
+
   const [bulkCheckState, setBulkCheckState] = useState({
-    isChecking: false,
     progress: 0,
     currentIndex: 0,
     results: [],
     summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0 }
   });
 
-  const [companies, setCompanies] = useState([]); // Array of {id, name, scrip}
-  const [selectedCompany, setSelectedCompany] = useState(null); // {id, name, scrip}
-  const [loadingCompanies, setLoadingCompanies] = useState(false);
-  const [showCompanySelector, setShowCompanySelector] = useState(false);
-
   const messageHandlerRef = useRef(null);
 
-  // Extract companies from Angular state when modal opens
-  useEffect(() => {
-    if (!ipoName && visible && webViewRef.current) {
-      extractCompaniesFromWebView();
-    } else if (ipoName) {
-      // If IPO name is provided via props, we still need the ID
-      // So we extract and find the matching company
-      extractCompaniesFromWebView();
+  // Dispatch message to the active handler
+  const handleWebViewMessage = (event) => {
+    if (messageHandlerRef.current) {
+      messageHandlerRef.current(event);
     }
-  }, [ipoName, visible]);
-
-  const extractCompaniesFromWebView = () => {
-    setLoadingCompanies(true);
-    
-    // Wait for page to be ready (shorter delay for API fetch)
-    setTimeout(() => {
-      const script = fetchIPOsDirectly();
-      webViewRef.current?.injectJavaScript(script);
-    }, 1500); 
   };
 
-  // Handle messages from WebView
+  // Register our handler with the bridge
   useEffect(() => {
-    if (!webViewRef.current) return;
-
-    const handleMessage = (event) => {
-      try {
-        const data = JSON.parse(event.nativeEvent.data);
-        
-        if (data.type === 'COMPANY_LIST_RESULT') {
-          if (data.success && Array.isArray(data.companies)) {
-            console.log('✅ Extracted', data.companies.length, 'companies with IDs');
-            setCompanies(data.companies);
-            setLoadingCompanies(false);
-            
-            // If ipoName was provided, find and select it
-            if (ipoName) {
-              const match = data.companies.find(c => c.name.includes(ipoName));
-              if (match) {
-                setSelectedCompany(match);
-              }
-            }
-          } else {
-            console.error('❌ Failed to extract companies:', data.error);
-            alert(`Failed to load company list: ${data.error}\n\nPlease wait for the page to load and try again.`);
-            setLoadingCompanies(false);
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing WebView message:', error);
-      }
-    };
-    
-    webViewRef.current.onMessage = handleMessage;
-  }, [ipoName, webViewRef.current]);
+    if (onWebViewMessage) {
+      onWebViewMessage(() => handleWebViewMessage);
+    }
+  }, [onWebViewMessage]);
 
   const handleBulkCheck = async () => {
     if (savedBoids.length === 0) {
@@ -97,83 +63,87 @@ export default function BulkCheckPanel({
       return;
     }
 
-    if (!selectedCompany) {
-      alert('Please select a company first');
-      setShowCompanySelector(true);
-      return;
-    }
-
-    // Reset state
+    setViewMode('checking');
     setBulkCheckState({
-      isChecking: true,
       progress: 0,
       currentIndex: 0,
       results: [],
       summary: { total: savedBoids.length, allotted: 0, notAllotted: 0, errors: 0 }
     });
 
-    // Process each BOID sequentially
+    const API_URL = getApiBaseUrl();
+
     for (let i = 0; i < savedBoids.length; i++) {
       const boid = savedBoids[i].boid;
-      
-      // Update current index
-      setBulkCheckState(prev => ({
-        ...prev,
-        currentIndex: i,
-        progress: Math.round((i / savedBoids.length) * 100)
-      }));
+      setBulkCheckState(prev => ({ ...prev, currentIndex: i, progress: Math.round((i / savedBoids.length) * 100) }));
 
-      // Reload page for fresh captcha (except first iteration)
-      if (i > 0) {
-        webViewRef.current?.injectJavaScript(reloadForFreshCaptcha());
-        await sleep(2000); // Wait for page reload
-      }
+      try {
+        // STEP 1: Extract Captcha
+        console.log(`[Bulk] Step 1: Extracting Captcha for ${boid}`);
+        const extractScript = generateCaptchaExtractionScript(boid, i === 0);
+        webViewRef.current?.injectJavaScript(extractScript);
 
-      // Inject check script using the selected company's name
-      const script = generateBulkCheckScript(selectedCompany.name, boid);
-      webViewRef.current?.injectJavaScript(script);
+        const extractionMsg = await waitForMessage('CAPTCHA_IMAGE_READY', boid, 10000);
+        
+        // STEP 2: Solve from RN (Avoid CORS)
+        console.log(`[Bulk] Step 2: Solving Captcha via Gemini for ${boid}`);
+        const solveResponse = await fetch(`${API_URL}/captcha/solve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: extractionMsg.imageBase64 })
+        });
+        const solveData = await solveResponse.json();
+        
+        if (!solveData.success) throw new Error('AI solve failed: ' + (solveData.error || 'Check backend logs'));
 
-      // Wait for result
-      await waitForResult(boid);
+        // STEP 3: Final Submission
+        console.log(`[Bulk] Step 3: Submitting form for ${boid}`);
+        const submitScript = generateFinalSubmissionScript(boid, solveData.captchaText);
+        webViewRef.current?.injectJavaScript(submitScript);
 
-      // Delay before next check (rate limiting)
-      if (i < savedBoids.length - 1) {
-        await sleep(3000);
-      }
-    }
+        const resultMsg = await waitForMessage('BULK_CHECK_RESULT', boid, 20000);
+        handleResult(resultMsg);
 
-    // Mark as complete
-    setBulkCheckState(prev => ({
-      ...prev,
-      isChecking: false,
-      progress: 100
-    }));
-  };
-
-  const waitForResult = (boid) => {
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        // Timeout after 15 seconds
+      } catch (error) {
+        console.error(`[Bulk] Error checking ${boid}:`, error);
         handleResult({
           boid,
           status: 'error',
-          error: 'Timeout - no response',
+          error: error.message,
           success: false
         });
-        resolve();
-      }, 15000);
+      }
+
+      if (i < savedBoids.length - 1) await sleep(3000);
+    }
+
+    setBulkCheckState(prev => ({ ...prev, progress: 100 }));
+    setViewMode('results');
+  };
+
+  // Generic message waiter
+  const waitForMessage = (type, boid, timeoutMs) => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        messageHandlerRef.current = null;
+        reject(new Error(`Timeout waiting for ${type}`));
+      }, timeoutMs);
 
       messageHandlerRef.current = (event) => {
         try {
           const data = JSON.parse(event.nativeEvent.data);
-          
-          if (data.type === 'BULK_CHECK_RESULT' && data.boid === boid) {
+          if (data.type === type && data.boid === boid) {
             clearTimeout(timeout);
-            handleResult(data);
-            resolve();
+            messageHandlerRef.current = null;
+            resolve(data);
+          } else if (data.type === 'BULK_CHECK_RESULT' && data.status === 'error' && data.boid === boid) {
+            // Catch error messages even if we were waiting for IMAGE_READY
+            clearTimeout(timeout);
+            messageHandlerRef.current = null;
+            reject(new Error(data.error));
           }
-        } catch (error) {
-          console.error('Error parsing WebView message:', error);
+        } catch (e) {
+          console.error('Parse error:', e);
         }
       };
     });
@@ -210,7 +180,7 @@ export default function BulkCheckPanel({
     try {
       await Share.share({
         message: csv,
-        title: `IPO Results - ${ipoName}`,
+        title: `IPO Results`,
       });
     } catch (error) {
       console.error('Error sharing CSV:', error);
@@ -230,95 +200,31 @@ export default function BulkCheckPanel({
     }
   };
 
-  // Attach message handler to WebView
-  React.useEffect(() => {
-    if (visible && webViewRef.current && messageHandlerRef.current) {
-      webViewRef.current.onMessage = messageHandlerRef.current;
-    }
-  }, [visible, messageHandlerRef.current]);
 
   return (
     <View style={styles.container}>
-      {/* Company Selector (if no IPO pre-selected) */}
-      {!ipoName && !bulkCheckState.isChecking && bulkCheckState.results.length === 0 && (
-        <View style={styles.companySelectorContainer}>
-          <Text style={styles.companySelectorLabel}>Select Company:</Text>
-          <TouchableOpacity 
-            style={styles.companySelectorButton}
-            onPress={() => setShowCompanySelector(true)}
-            disabled={loadingCompanies}
-          >
-            {loadingCompanies ? (
-              <ActivityIndicator size="small" color="#6200EE" />
-            ) : (
-              <>
-                <Text style={styles.companySelectorText}>
-                  {selectedCompany ? selectedCompany.name : 'Tap to select company'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color="#666" />
-              </>
-            )}
-          </TouchableOpacity>
-          {loadingCompanies && (
-            <Text style={styles.loadingText}>Loading companies from website...</Text>
-          )}
-        </View>
-      )}
-
-      {/* Company Selector Modal */}
-      <Modal
-        visible={showCompanySelector}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCompanySelector(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Company</Text>
-              <TouchableOpacity onPress={() => setShowCompanySelector(false)}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={companies}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.companyItem}
-                  onPress={() => {
-                    setSelectedCompany(item);
-                    setShowCompanySelector(false);
-                  }}
-                >
-                  <Text style={styles.companyItemText}>{item.name}</Text>
-                  {item.scrip && (
-                    <Text style={styles.companyItemSubtext}>Scrip: {item.scrip}</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <Text style={styles.emptyText}>No companies available</Text>
-              }
-            />
+      {/* 1. SELECTION MODE: User selects company in WebView */}
+      {viewMode === 'selection' && (
+        <View style={styles.selectionView}>
+          <View style={styles.instructionContainer}>
+            <Ionicons name="information-circle-outline" size={20} color="#6200EE" />
+            <Text style={styles.instructionText}>
+              Please select the <Text style={styles.bold}>IPO Company</Text> from the dropdown in the website above, then click Start.
+            </Text>
           </View>
+          
+          <TouchableOpacity 
+            style={styles.bulkCheckButton}
+            onPress={handleBulkCheck}
+          >
+            <Ionicons name="play" size={20} color="white" />
+            <Text style={styles.bulkCheckText}>Start Bulk Check</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
-
-      {/* Bulk Check Button */}
-      {!bulkCheckState.isChecking && bulkCheckState.results.length === 0 && (
-        <TouchableOpacity 
-          style={styles.bulkCheckButton}
-          onPress={handleBulkCheck}
-        >
-          <Ionicons name="flash" size={20} color="white" />
-          <Text style={styles.bulkCheckText}>Bulk Check All BOIDs</Text>
-        </TouchableOpacity>
       )}
 
-      {/* Progress Indicator */}
-      {bulkCheckState.isChecking && (
+      {/* 2. PROGRESS / CHECKING MODE */}
+      {viewMode === 'checking' && (
         <View style={styles.progressContainer}>
           <Text style={styles.progressText}>
             Checking IPO Results... {bulkCheckState.progress}%
@@ -337,17 +243,17 @@ export default function BulkCheckPanel({
         </View>
       )}
 
-      {/* Results Display */}
-      {bulkCheckState.results.length > 0 && (
+      {/* 3. RESULTS DISPLAY (Shown during checking and after finish) */}
+      {(viewMode === 'checking' || viewMode === 'results') && (
         <View style={styles.resultsContainer}>
           <View style={styles.resultsHeader}>
             <Text style={styles.resultsTitle}>
-              {bulkCheckState.isChecking ? 'Checking...' : 'Results Complete!'}
+              {viewMode === 'checking' ? 'Progress' : 'Checking Complete!'}
             </Text>
-            {!bulkCheckState.isChecking && (
+            {viewMode === 'results' && (
               <TouchableOpacity onPress={exportToCSV} style={styles.exportButton}>
                 <Ionicons name="download-outline" size={18} color="#6200EE" />
-                <Text style={styles.exportText}>Export CSV</Text>
+                <Text style={styles.exportText}>Export</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -355,18 +261,12 @@ export default function BulkCheckPanel({
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-              <Text style={styles.summaryText}>{bulkCheckState.summary.allotted} allotted</Text>
+              <Text style={styles.summaryText}>{bulkCheckState.summary.allotted} Allotted</Text>
             </View>
             <View style={styles.summaryItem}>
               <Ionicons name="close-circle" size={16} color="#F44336" />
-              <Text style={styles.summaryText}>{bulkCheckState.summary.notAllotted} not allotted</Text>
+              <Text style={styles.summaryText}>{bulkCheckState.summary.notAllotted} Not Allotted</Text>
             </View>
-            {bulkCheckState.summary.errors > 0 && (
-              <View style={styles.summaryItem}>
-                <Ionicons name="alert-circle" size={16} color="#FF9800" />
-                <Text style={styles.summaryText}>{bulkCheckState.summary.errors} errors</Text>
-              </View>
-            )}
           </View>
 
           <ScrollView style={styles.resultsList}>
@@ -385,20 +285,28 @@ export default function BulkCheckPanel({
                 </View>
               </View>
             ))}
+            {viewMode === 'checking' && (
+              <View style={styles.checkingIndicator}>
+                 <ActivityIndicator size="small" color="#6200EE" />
+                 <Text style={styles.checkingIndicatorText}>Processing next BOID...</Text>
+              </View>
+            )}
           </ScrollView>
 
-          {!bulkCheckState.isChecking && (
+          {viewMode === 'results' && (
             <TouchableOpacity 
               style={styles.doneButton}
-              onPress={() => setBulkCheckState({
-                isChecking: false,
-                progress: 0,
-                currentIndex: 0,
-                results: [],
-                summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0 }
-              })}
+              onPress={() => {
+                setViewMode('selection');
+                setBulkCheckState({
+                  progress: 0,
+                  currentIndex: 0,
+                  results: [],
+                  summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0 }
+                });
+              }}
             >
-              <Text style={styles.doneButtonText}>Done</Text>
+              <Text style={styles.doneButtonText}>Done / Check Another</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -408,8 +316,30 @@ export default function BulkCheckPanel({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginVertical: 10,
+  // New Styles for Selection View
+  selectionView: {
+    padding: 16,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    marginBottom: 12,
+  },
+  instructionContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 16,
+  },
+  instructionText: {
+    fontSize: 14,
+    color: '#312E81',
+    lineHeight: 20,
+    flex: 1,
+  },
+  bold: {
+    fontWeight: 'bold',
+    color: '#6200EE',
   },
   bulkCheckButton: {
     flexDirection: 'row',
@@ -417,7 +347,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#6200EE',
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     gap: 8,
     elevation: 3,
   },
@@ -428,19 +358,20 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     padding: 16,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    marginBottom: 12,
   },
   progressText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+    color: '#1F2937',
+    marginBottom: 10,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 4,
+    height: 10,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 5,
     overflow: 'hidden',
   },
   progressFill: {
@@ -449,13 +380,17 @@ const styles = StyleSheet.create({
   },
   progressDetail: {
     fontSize: 12,
-    color: '#666',
+    color: '#6B7280',
     marginTop: 8,
+    textAlign: 'right',
   },
   resultsContainer: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    elevation: 2,
   },
   resultsHeader: {
     flexDirection: 'row',
@@ -466,7 +401,7 @@ const styles = StyleSheet.create({
   resultsTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#111827',
   },
   exportButton: {
     flexDirection: 'row',
@@ -480,31 +415,32 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: 16,
+    marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#F3F4F6',
   },
   summaryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   summaryText: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
   },
   resultsList: {
-    maxHeight: 200,
+    maxHeight: 250,
   },
   resultItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
+    gap: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#F3F4F6',
   },
   resultDetails: {
     flex: 1,
@@ -512,99 +448,35 @@ const styles = StyleSheet.create({
   resultBoid: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
   },
   resultStatus: {
     fontSize: 12,
-    color: '#666',
+    color: '#6B7280',
     marginTop: 2,
+  },
+  checkingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    gap: 8,
+  },
+  checkingIndicatorText: {
+    fontSize: 13,
+    color: '#6200EE',
+    fontStyle: 'italic',
   },
   doneButton: {
     backgroundColor: '#6200EE',
-    padding: 12,
-    borderRadius: 6,
+    padding: 14,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 16,
   },
   doneButtonText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
-  },
-  // Company Selector styles
-  companySelectorContainer: {
-    marginBottom: 12,
-  },
-  companySelectorLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  companySelectorButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    minHeight: 48,
-  },
-  companySelectorText: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-  },
-  loadingText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 6,
-    fontStyle: 'italic',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '70%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  companyItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  companyItemText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  companyItemSubtext: {
-    fontSize: 12,
-    color: '#666',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    marginTop: 20,
-    fontSize: 14,
   },
 });

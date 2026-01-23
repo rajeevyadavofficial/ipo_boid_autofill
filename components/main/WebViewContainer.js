@@ -6,7 +6,7 @@ import styles from '../../styles/styles';
 import strategyManager from '../../utils/WebViewStrategies';
 
 const WebViewContainer = forwardRef(
-  ({ currentUrl, onResultExtracted }, ref) => {
+  ({ currentUrl, onResultExtracted, onMessage }, ref) => {
     const webViewRef = useRef();
     const [error, setError] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -199,6 +199,7 @@ const WebViewContainer = forwardRef(
           onMessage={(event) => {
             const rawData = event.nativeEvent.data;
             console.log('📨 [WebView] Message received:', rawData);
+            onMessage?.(event);
             
             try {
               const data = JSON.parse(rawData);

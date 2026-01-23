@@ -76,6 +76,8 @@ export default function MainApp() {
     setEditIndex(null);
   };
 
+  const [onWebViewMessage, setOnWebViewMessage] = useState(null);
+
   const handleResultExtracted = (resultText) => {
     if (!currentCheckingBoid) return;
     setResults((prevResults) => {
@@ -108,6 +110,7 @@ export default function MainApp() {
           ref={webViewRef}
           currentUrl={currentUrl}
           onResultExtracted={handleResultExtracted}
+          onMessage={(e) => onWebViewMessage?.(e)}
         />
       </View>
 
@@ -159,6 +162,7 @@ export default function MainApp() {
         setResults={setResults}
         setCurrentCheckingBoid={setCurrentCheckingBoid}
         ipoName={currentIPO?.company} // Pass current IPO name
+        onWebViewMessage={setOnWebViewMessage}
       />
 
       {/* Developer Sidebar */}

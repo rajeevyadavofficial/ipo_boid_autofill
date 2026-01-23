@@ -1,7 +1,4 @@
-// services/ipoService.js
-
-// Backend API URL - update this to your deployed backend URL
-const API_BASE_URL = 'http://192.168.16.103:3000/api';
+import { getApiBaseUrl } from '../utils/config';
 
 // Fallback mock data in case backend is unavailable
 const MOCK_IPOS = [
@@ -114,8 +111,9 @@ const MOCK_IPOS = [
 
 export const getUpcomingIpos = async () => {
   try {
+    const API_URL = getApiBaseUrl();
     // Try to fetch from backend API
-    const response = await fetch(`${API_BASE_URL}/ipos`);
+    const response = await fetch(`${API_URL}/ipos`);
     
     if (!response.ok) {
       throw new Error('Backend API unavailable');

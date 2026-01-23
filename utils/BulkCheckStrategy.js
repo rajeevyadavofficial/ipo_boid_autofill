@@ -137,130 +137,146 @@ export const generateBulkCheckScript = (ipoName, boid) => {
 };
 
 /**
+ * Step 1: Extract Captcha Image
+ * This avoids CORS issues by sending the image back to RN for processing.
+ */
+export const generateCaptchaExtractionScript = (boid, isFirst) => {
+  return `
+(async function extractCaptcha() {
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  
+  try {
+    console.log('🔍 Extraction started for BOID: ${boid}');
+    
+    // 1. Refresh Captcha if not first run
+    if (!${isFirst}) {
+      const captchaImg = document.querySelector('img[alt="captcha"]');
+      if (captchaImg) {
+        captchaImg.click();
+        await sleep(1500);
+      }
+    }
+    
+    // 2. Extract image
+    const captchaImg = document.querySelector('img[alt="captcha"]');
+    if (!captchaImg) throw new Error('Captcha image not found');
+    
+    let base64Image = '';
+    if (captchaImg.src.startsWith('data:image')) {
+      base64Image = captchaImg.src.split(',')[1];
+    }
+    
+    if (!base64Image) {
+      console.log('⚠️ Canvas extraction fallback...');
+      const canvas = document.createElement('canvas');
+      canvas.width = captchaImg.naturalWidth || captchaImg.width;
+      canvas.height = captchaImg.naturalHeight || captchaImg.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(captchaImg, 0, 0);
+      base64Image = canvas.toDataURL('image/png').split(',')[1];
+    }
+    
+    if (!base64Image) throw new Error('Failed to extract image data');
+
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'CAPTCHA_IMAGE_READY',
+      boid: '${boid}',
+      imageBase64: base64Image
+    }));
+
+  } catch (error) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'BULK_CHECK_RESULT',
+      boid: '${boid}',
+      status: 'error',
+      error: 'Extraction: ' + error.message,
+      success: false
+    }));
+  }
+})();
+`;
+};
+
+/**
+ * Step 2: Fill BOID/Captcha and Submit
+ */
+export const generateFinalSubmissionScript = (boid, captchaText) => {
+  return `
+(async function submitFinal() {
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  
+  try {
+    console.log('📥 Submitting for BOID: ${boid}');
+    
+    const boidInput = document.querySelector('#boid');
+    const captchaInput = document.querySelector('#userCaptcha');
+    const submitBtn = document.querySelector('button[type="submit"]');
+    
+    if (!boidInput || !captchaInput || !submitBtn) throw new Error('Form elements missing');
+
+    // Fill BOID
+    boidInput.value = '${boid}';
+    boidInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Fill Captcha
+    captchaInput.value = '${captchaText}';
+    captchaInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    await sleep(300);
+    submitBtn.click();
+    
+    console.log('📤 Form submitted, waiting for results...');
+    await sleep(2500);
+
+    // Check for Invalid Captcha
+    const errorMsg = document.querySelector('p.text-danger.text-center');
+    if (errorMsg && errorMsg.innerText.includes('Invalid Captcha')) {
+      throw new Error('Invalid Captcha (AI Mismatch)');
+    }
+
+    // Parse Result
+    const bodyText = document.body.innerText;
+    const resultBody = document.querySelector('.modal-body')?.innerText || '';
+    const fullText = bodyText + ' ' + resultBody;
+    
+    const isAllotted = fullText.includes('Congratulation Alloted !!!');
+    const sharesMatch = fullText.match(/Alloted quantity\\s*:\\s*(\\d+)/i);
+    const shares = sharesMatch ? parseInt(sharesMatch[1]) : 0;
+    
+    // Close modal
+    const closeBtn = document.querySelector('.modal-footer button') || document.querySelector('.modal-header .close');
+    if (closeBtn) {
+      closeBtn.click();
+      await sleep(500);
+    }
+
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'BULK_CHECK_RESULT',
+      boid: '${boid}',
+      status: isAllotted ? 'allotted' : 'not-allotted',
+      shares: shares,
+      success: true,
+      timestamp: new Date().toISOString()
+    }));
+
+  } catch (error) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'BULK_CHECK_RESULT',
+      boid: '${boid}',
+      status: 'error',
+      error: 'Submission: ' + error.message,
+      success: false
+    }));
+  }
+})();
+`;
+};
+
+/**
  * Reload the IPO result page to get a fresh captcha
- * @returns {string} - JavaScript code to reload page
  */
 export const reloadForFreshCaptcha = () => {
-  return `
-window.location.reload();
-true; // Return true to indicate reload initiated
-`;
+  return `window.location.reload(); true;`;
 };
 
-/**
- * Extract list of available IPOs from the website's dropdown
- * @returns {string} - JavaScript code to extract IPO list
- */
-export const extractIPOListFromWebsite = () => {
-  return `
-(function() {
-  try {
-    // Click the ng-select to open the dropdown
-    const ngSelect = document.querySelector('#companyShare');
-    if (!ngSelect) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'IPO_LIST_RESULT',
-        success: false,
-        error: 'Company dropdown not found'
-      }));
-      return;
-    }
-
-    const input = ngSelect.querySelector('input');
-    input.focus();
-    input.click();
-
-    // Wait a bit for the dropdown to populate
-    setTimeout(() => {
-      const options = document.querySelectorAll('.ng-option');
-      
-      if (options.length === 0) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'IPO_LIST_RESULT',
-          success: false,
-          error: 'No IPOs found in dropdown'
-        }));
-        return;
-      }
-
-      // Extract company names from all options
-      const companies = Array.from(options).map(opt => opt.innerText.trim());
-      
-      // Close the dropdown
-      document.querySelector('.ng-clear-wrapper')?.click();
-      
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'IPO_LIST_RESULT',
-        success: true,
-        companies: companies
-      }));
-    }, 1000);
-  } catch (error) {
-    window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'IPO_LIST_RESULT',
-      success: false,
-      error: error.message
-    }));
-  }
-})();
-`;
-};
-
-/**
- * Fetch company list directly from the IPO result API
- * This is the MOST RELIABLE way - calls the endpoint directly
- * @returns {string} - JavaScript code to fetch company data
- */
-export const fetchIPOsDirectly = () => {
-  return `
-(async function() {
-  try {
-    console.log('🔄 Fetching company list from API...');
-    
-    const response = await fetch('https://iporesult.cdsc.com.np/result/companyShares/fileUploaded', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error('API request failed with status ' + response.status);
-    }
-
-    const data = await response.json();
-    
-    if (!Array.isArray(data)) {
-      throw new Error('Invalid API response format');
-    }
-
-    // Filter valid companies and map to our format
-    const companies = data
-      .filter(c => c.id && c.name)
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        scrip: c.scrip || ''
-      }));
-
-    console.log('✅ Fetched ' + companies.length + ' companies');
-
-    window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'COMPANY_LIST_RESULT',
-      success: true,
-      companies: companies
-    }));
-
-  } catch (error) {
-    console.error('❌ Fetch failed:', error.message);
-    window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'COMPANY_LIST_RESULT',
-      success: false,
-      error: error.message
-    }));
-  }
-})();
-`;
-};
 
