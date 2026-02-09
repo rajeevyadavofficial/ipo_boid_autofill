@@ -1,94 +1,194 @@
 /**
- * Simple Nepali Date Converter (BS <-> AD)
- * Covers BS Years 2070 to 2090
+ * High-Precision Nepali Date Converter (BS <-> AD)
+ * 1:1 Logic Replication from the 'nepali-date-converter' library
  */
 
 const bsMonthDays = {
-  2070: [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
-  2071: [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
-  2072: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2073: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2074: [31, 31, 31, 32, 31, 31, 30, 30, 29, 30, 29, 31],
-  2075: [31, 31, 32, 31, 31, 31, 30, 29, 30, 30, 29, 30],
-  2076: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2077: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2078: [31, 31, 31, 32, 31, 31, 30, 30, 29, 30, 29, 31],
-  2079: [31, 31, 32, 31, 31, 31, 30, 30, 29, 30, 29, 30],
-  2080: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2081: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2082: [31, 31, 32, 31, 31, 31, 30, 30, 29, 30, 29, 31],
-  2083: [31, 31, 32, 31, 31, 31, 30, 29, 30, 30, 29, 30],
-  2084: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2085: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2086: [31, 31, 32, 31, 31, 31, 30, 30, 29, 30, 29, 31],
-  2087: [31, 31, 32, 31, 31, 31, 30, 30, 29, 30, 29, 30],
-  2088: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2089: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2090: [31, 31, 31, 32, 31, 31, 30, 30, 29, 30, 29, 31],
+    '2000': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2001': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2002': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2003': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2004': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2005': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2006': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2007': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2008': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 29, 31],
+    '2009': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2010': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2011': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2012': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 30, 30],
+    '2013': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2014': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2015': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2016': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 30, 30],
+    '2017': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2018': [31, 32, 31, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2019': [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2020': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2021': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2022': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 30],
+    '2023': [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2024': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2025': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2026': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2027': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2028': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2029': [31, 31, 32, 31, 32, 30, 30, 29, 30, 29, 30, 30],
+    '2030': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2031': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2032': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2033': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2034': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2035': [30, 32, 31, 32, 31, 31, 29, 30, 30, 29, 29, 31],
+    '2036': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2037': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2038': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2039': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 30, 30],
+    '2040': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2041': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2042': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2043': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 30, 30],
+    '2044': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2045': [31, 32, 31, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2046': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2047': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2048': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2049': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 30],
+    '2050': [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2051': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2052': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2053': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 30],
+    '2054': [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2055': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2056': [31, 31, 32, 31, 32, 30, 30, 29, 30, 29, 30, 30],
+    '2057': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2058': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2059': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2060': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2061': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2062': [30, 32, 31, 32, 31, 31, 29, 30, 29, 30, 29, 31],
+    '2063': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2064': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2065': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2066': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 29, 31],
+    '2067': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2068': [31, 31, 32, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2069': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2070': [31, 31, 31, 32, 31, 31, 29, 30, 30, 29, 30, 30],
+    '2071': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2072': [31, 32, 31, 32, 31, 30, 30, 29, 30, 29, 30, 30],
+    '2073': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2074': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2075': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2076': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 30],
+    '2077': [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2078': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2079': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2080': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 30],
+    '2081': [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2082': [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2083': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2084': [31, 32, 31, 32, 31, 30, 30, 30, 29, 29, 30, 31],
+    '2085': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
+    '2086': [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
+    '2087': [31, 31, 32, 31, 31, 31, 30, 30, 29, 30, 30, 30],
+    '2088': [30, 31, 32, 32, 30, 31, 30, 30, 29, 30, 30, 30],
+    '2089': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 30, 30],
+    '2090': [30, 32, 31, 32, 31, 30, 30, 30, 29, 30, 30, 30]
 };
 
-const epochAD = new Date(2013, 3, 14); // 2070-01-01 BS is 2013-04-14 AD
-const epochBSYear = 2070;
+// --- PRE-CALCULATION BLOCK (The Precision Engine) ---
+const EPOCH_BS_YEAR = 2000;
+const EPOCH_AD_BASE = new Date(Date.UTC(1943, 3, 13)); // 1943-04-13 is Base 0
 
-export const bsToAd = (year, month, day) => {
-  if (year < 2070 || year > 2090) return null;
-  
-  let totalDays = 0;
-  
-  // Days from 2070 up to current year
-  for (let y = epochBSYear; y < year; y++) {
-    totalDays += bsMonthDays[y].reduce((a, b) => a + b, 0);
-  }
-  
-  // Days from months in current year
-  for (let m = 0; m < month - 1; m++) {
-    totalDays += bsMonthDays[year][m];
-  }
-  
-  totalDays += (day - 1);
-  
-  const resultAD = new Date(epochAD);
-  resultAD.setDate(resultAD.getDate() + totalDays);
-  
-  return resultAD;
-};
+/**
+ * Pre-calculate total days in each year and cumulative days since epoch
+ */
+const yearInfo = Object.keys(bsMonthDays).sort().map(year => {
+    const daysInYear = bsMonthDays[year].reduce((a, b) => a + b, 0);
+    return { year: parseInt(year), daysInYear };
+});
 
-export const adToBs = (adDate) => {
-  let diff = Math.floor((adDate - epochAD) / (1000 * 60 * 60 * 24));
-  
-  if (diff < 0) return null;
-  
-  let currentYear = epochBSYear;
-  let currentMonth = 1;
-  
-  while (diff >= bsMonthDays[currentYear].reduce((a, b) => a + b, 0)) {
-    diff -= bsMonthDays[currentYear].reduce((a, b) => a + b, 0);
-    currentYear++;
-    if (!bsMonthDays[currentYear]) return null;
-  }
-  
-  for (let m = 0; m < 12; m++) {
-    const daysInMonth = bsMonthDays[currentYear][m];
-    if (diff < daysInMonth) {
-      currentMonth = m + 1;
-      break;
+const getCumulativeDaysForYear = (targetYear) => {
+    let cumulative = 0;
+    for (const info of yearInfo) {
+        if (info.year < targetYear) cumulative += info.daysInYear;
+        else break;
     }
-    diff -= daysInMonth;
-  }
-  
-  return {
-    year: currentYear,
-    month: currentMonth,
-    day: diff + 1
-  };
+    return cumulative;
+};
+
+/**
+ * Convert BS to AD with 1:1 Reference Consistency
+ */
+export const bsToAd = (year, month, day) => {
+    if (!bsMonthDays[year]) return null;
+    
+    // 1. Calculate days passed from 2000/01/01 BS
+    let totalDays = getCumulativeDaysForYear(year);
+    
+    // Add days for months in target year
+    for (let m = 0; m < month - 1; m++) {
+        totalDays += bsMonthDays[year][m];
+    }
+    
+    // Add target day
+    totalDays += day;
+
+    // 2. Map to AD Date (Base 1943-04-13 + totalDays)
+    const resultAD = new Date(EPOCH_AD_BASE);
+    resultAD.setUTCDate(resultAD.getUTCDate() + totalDays);
+    
+    return resultAD;
+};
+
+/**
+ * Convert AD to BS with 1:1 Reference Consistency
+ */
+export const adToBs = (adDate) => {
+    // 1. Get total days relative to Base 1943-04-13
+    const utcAd = Date.UTC(adDate.getFullYear(), adDate.getMonth(), adDate.getDate());
+    const utcBase = EPOCH_AD_BASE.getTime();
+    
+    let daysPassed = Math.ceil((utcAd - utcBase) / (1000 * 60 * 60 * 24));
+    
+    if (daysPassed < 1) return null;
+
+    // 2. Walk through years to find matching year
+    let currentYear = EPOCH_BS_YEAR;
+    while (bsMonthDays[currentYear]) {
+        const daysInThisYear = bsMonthDays[currentYear].reduce((a, b) => a + b, 0);
+        if (daysPassed <= daysInThisYear) break;
+        daysPassed -= daysInThisYear;
+        currentYear++;
+    }
+
+    if (!bsMonthDays[currentYear]) return null;
+
+    // 3. Walk through months to find matching month
+    let currentMonth = 1;
+    for (let m = 0; m < 12; m++) {
+        const daysInThisMonth = bsMonthDays[currentYear][m];
+        if (daysPassed <= daysInThisMonth) {
+            currentMonth = m + 1;
+            break;
+        }
+        daysPassed -= daysInThisMonth;
+    }
+
+    return {
+        year: currentYear,
+        month: currentMonth,
+        day: daysPassed
+    };
 };
 
 export const nepaliMonths = [
-  "Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
-  "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra"
+    "Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
+    "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra"
 ];
 
 export const englishMonths = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
 ];

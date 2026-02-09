@@ -116,10 +116,18 @@ export const getUpcomingIpos = async () => {
     const response = await fetch(`${API_URL}/ipos`);
     
     if (!response.ok) {
-      throw new Error('Backend API unavailable');
+      throw new Error(`Backend API returned ${response.status}`);
     }
     
-    const data = await response.json();
+    const rawText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.error(`❌ [IPO Service] JSON Parse error. Status: ${response.status}`);
+      console.error(`❌ [IPO Service] Response snippet: ${rawText.substring(0, 100)}`);
+      throw new Error(`Server at ${API_URL} returned HTML instead of JSON. Check backend status.`);
+    }
     
     if (data.success && data.data) {
       console.log('✅ Fetched IPOs from backend');

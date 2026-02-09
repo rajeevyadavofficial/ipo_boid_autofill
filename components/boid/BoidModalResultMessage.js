@@ -6,8 +6,13 @@ export default function BoidModalResultMessage({ results, total }) {
   if (!results || results.length === 0 || total === 0) return null;
 
   const allotted = results.filter((r) =>
-    r.result?.toLowerCase().includes('congrat')
+    typeof r?.result === 'string' && r.result.toLowerCase().includes('congrat')
   ).length;
+
+  const totalShares = results.reduce((sum, r) => {
+    const match = typeof r?.result === 'string' ? r.result.match(/quantity\s*:\s*(\d+)/i) : null;
+    return sum + (match ? parseInt(match[1]) : 0);
+  }, 0);
 
   return (
     <Text
@@ -19,8 +24,8 @@ export default function BoidModalResultMessage({ results, total }) {
       }}
     >
       {allotted > 0
-        ? `🎉 Congratulations ${allotted}/${total} allotted !`
-        : `😔 Sorry ${allotted}/${total} allotted !`}
+        ? `🎉 Congratulations ${allotted}/${total} allotted! ${totalShares > 0 ? `(Total ${totalShares} shares)` : ''}`
+        : `😔 Sorry ${allotted}/${total} allotted!`}
     </Text>
   );
 }

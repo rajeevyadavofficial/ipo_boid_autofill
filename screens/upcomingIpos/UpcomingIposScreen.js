@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,32 +35,41 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
   const insets = useSafeAreaInsets();
   const API_BASE_URL = getApiBaseUrl();
   const [ipos, setIpos] = useState([]);
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('Open'); // Open, Upcoming, Closed
+  const [activeTab, setActiveTab] = useState('Open'); // Open, Upcoming, Closed, News
   const [sortAscending, setSortAscending] = useState(true);
 
   const fetchIpos = async () => {
     try {
-
       const type = activeTab.toLowerCase();
       const response = await fetch(`${API_BASE_URL}/ipos?type=${type}`);
-      
-      if (!response.ok) {
-        throw new Error('Backend API unavailable');
-      }
-      
       const data = await response.json();
       
       if (data.success && data.data) {
-        console.log(`✅ Fetched ${data.data.length} ${activeTab} IPOs`);
         setIpos(data.data);
       } else {
         setIpos([]);
       }
     } catch (error) {
-      console.warn('⚠️  Failed to fetch IPOs:', error.message);
+      console.warn('⚠️ Failed to fetch IPOs:', error.message);
       setIpos([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const fetchNews = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/news`);
+      const data = await response.json();
+      if (data.success && data.data) {
+        setNews(data.data);
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to fetch News:', error.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -68,12 +78,20 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
 
   useEffect(() => {
     setLoading(true);
-    fetchIpos();
+    if (activeTab === 'News') {
+      fetchNews();
+    } else {
+      fetchIpos();
+    }
   }, [activeTab]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchIpos();
+    if (activeTab === 'News') {
+      fetchNews();
+    } else {
+      fetchIpos();
+    }
   }, [activeTab]);
 
   const toggleSort = () => {
@@ -84,7 +102,6 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
     return [...ipos].sort((a, b) => {
       let dateA, dateB;
       
-      // Use appropriate date field based on tab
       if (activeTab === 'Open') {
         dateA = new Date(a.closingDate);
         dateB = new Date(b.closingDate);
@@ -92,12 +109,10 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
         dateA = new Date(a.openingDate);
         dateB = new Date(b.openingDate);
       } else {
-        // Closed - sort by closing date
         dateA = new Date(a.closingDate);
         dateB = new Date(b.closingDate);
       }
 
-      // Handle invalid dates
       if (isNaN(dateA)) dateA = new Date(0);
       if (isNaN(dateB)) dateB = new Date(0);
 
@@ -123,8 +138,6 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
       const calculateTimeLeft = () => {
         const now = new Date();
         const close = new Date(closingDate);
-        // Set to 5 PM (17:00)
-
         const diff = close - now;
 
         if (diff <= 0) {
@@ -146,7 +159,6 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
 
       calculateTimeLeft();
       const timer = setInterval(calculateTimeLeft, 1000);
-
       return () => clearInterval(timer);
     }, [closingDate]);
 
@@ -207,13 +219,29 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
     </TouchableOpacity>
   );
 
-
+  const renderNewsItem = ({ item }) => (
+    <TouchableOpacity 
+      style={styles.newsCard}
+      onPress={() => Linking.openURL(item.link)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.newsHeader}>
+        <Ionicons name="newspaper-outline" size={20} color="#6200EE" />
+        <Text style={styles.newsDate}>{item.date}</Text>
+      </View>
+      <Text style={styles.newsTitle}>{item.title}</Text>
+      <View style={styles.newsFooter}>
+        <Text style={styles.readMore}>Read on ShareSansar</Text>
+        <Ionicons name="chevron-forward" size={14} color="#6200EE" />
+      </View>
+    </TouchableOpacity>
+  );
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Open': return '#4CAF50'; // Green
-      case 'Upcoming': return '#00BCD4'; // Cyan
-      case 'Closed': return '#F44336'; // Red
+      case 'Open': return '#4CAF50'; 
+      case 'Upcoming': return '#00BCD4'; 
+      case 'Closed': return '#F44336'; 
       default: return '#999';
     }
   };
@@ -227,35 +255,37 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
           {renderTab('Open')}
           {renderTab('Upcoming')}
           {renderTab('Closed')}
+          {renderTab('News')}
         </View>
         
-        <TouchableOpacity style={styles.sortButton} onPress={toggleSort}>
-          <Text style={styles.sortText}>
-            Sort by Date {sortAscending ? '↑' : '↓'}
-          </Text>
-          <Ionicons name={sortAscending ? "arrow-up" : "arrow-down"} size={16} color="#6200EE" />
-        </TouchableOpacity>
+        {activeTab !== 'News' && (
+          <TouchableOpacity style={styles.sortButton} onPress={toggleSort}>
+            <Text style={styles.sortText}>
+              Sort by Date {sortAscending ? '↑' : '↓'}
+            </Text>
+            <Ionicons name={sortAscending ? "arrow-up" : "arrow-down"} size={16} color="#6200EE" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* IPO List */}
       {loading && !refreshing ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#6200EE" />
         </View>
       ) : (
         <FlatList
-          data={getSortedIpos()}
+          data={activeTab === 'News' ? news : getSortedIpos()}
           keyExtractor={(item) => item._id || item.id}
-          renderItem={renderItem}
+          renderItem={activeTab === 'News' ? renderNewsItem : renderItem}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6200EE']} />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="documents-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>No {activeTab.toLowerCase()} IPOs found</Text>
-              <Text style={styles.emptySubtext}>Add IPOs from the Admin App</Text>
+              <Ionicons name={activeTab === 'News' ? "newspaper-outline" : "documents-outline"} size={64} color="#ccc" />
+              <Text style={styles.emptyText}>No {activeTab.toLowerCase()} found</Text>
+              {activeTab !== 'News' && <Text style={styles.emptySubtext}>Add IPOs from the Admin App</Text>}
             </View>
           }
         />
@@ -466,5 +496,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#aaa',
     marginTop: 8,
+    textAlign: 'center',
+  },
+  newsCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6200EE',
+  },
+  newsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  newsDate: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
+  },
+  newsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  newsFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  readMore: {
+    fontSize: 12,
+    color: '#6200EE',
+    fontWeight: '600',
   },
 });

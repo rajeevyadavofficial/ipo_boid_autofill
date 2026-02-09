@@ -5,6 +5,7 @@ import * as SplashScreenModule from 'expo-splash-screen'; // Rename to avoid con
 
 import CustomSplashScreen from './components/SplashScreen.js'; // Rename import for clarity
 import MainApp from './screens/MainApp.js';
+import Toast from 'react-native-toast-message';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenModule.preventAutoHideAsync();
@@ -29,6 +30,7 @@ export default function App() {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#343a40" />
         <MainApp />
+        <Toast />
       </View>
     </SafeAreaProvider>
   );

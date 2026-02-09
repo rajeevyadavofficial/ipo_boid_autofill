@@ -119,6 +119,10 @@ export default function MainApp() {
         <View style={{ flex: 1, paddingBottom: 80 }}>
           <UpcomingIposScreen 
             onSelectIPO={(ipo) => {
+              // Clear results if selecting a different company
+              if (currentIPO?.company !== ipo.company) {
+                setResults([]);
+              }
               setCurrentIPO(ipo);
               setModalVisible(true);
               setShowUpcomingIpos(false);
@@ -169,6 +173,8 @@ export default function MainApp() {
       <DeveloperSidebar
         visible={developerVisible}
         onClose={() => setDeveloperVisible(false)}
+        webViewRef={webViewRef}
+        onWebViewMessage={setOnWebViewMessage}
       />
     </View>
   );

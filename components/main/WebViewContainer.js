@@ -161,6 +161,7 @@ const WebViewContainer = forwardRef(
           }}
           style={styles.webView}
           javaScriptEnabled={true}
+          debuggingEnabled={true}
           domStorageEnabled={true}
           mixedContentMode="always"
           scalesPageToFit={false}

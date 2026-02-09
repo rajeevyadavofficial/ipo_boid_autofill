@@ -65,27 +65,36 @@ export default function BoidModal({
     setCurrentCheckingBoid,
   });
 
+  const [panelMode, setPanelMode] = React.useState('selection');
+  const [isMinimized, setIsMinimized] = React.useState(false); 
+  const [autoCheckBoid, setAutoCheckBoid] = React.useState(null);
+
   const renderItem = ({ item, index }) => {
-    const match = results.find((r) => r.boid === item.boid);
+    if (!item || !item.boid) return null; // Safety check
+    const match = Array.isArray(results) ? results.find((r) => r?.boid === item.boid) : undefined;
+    
     return (
       <BoidListItem
         item={item}
         index={index}
         result={match?.result}
         fillBoid={checkBoidResult}
+        autoCheck={(boid) => setAutoCheckBoid(boid)} // Single Auto Check
         deleteBoid={deleteBoid}
         startEdit={startEdit}
       />
     );
   };
 
-  const [panelMode, setPanelMode] = React.useState('selection');
-  const [isMinimized, setIsMinimized] = React.useState(false); 
+  // Safety check: ensure savedBoids is always a valid array of objects
+  const safeSavedBoids = Array.isArray(savedBoids) 
+    ? savedBoids.filter(item => item && typeof item === 'object' && item.boid)
+    : [];
 
-  const total = savedBoids.length;
-  const allotted = results.filter((r) =>
-    r.result?.toLowerCase().includes('congrat')
-  ).length;
+  const total = safeSavedBoids.length;
+  const allotted = Array.isArray(results) ? results.filter((r) =>
+    typeof r?.result === 'string' && r.result.toLowerCase().includes('congrat')
+  ).length : 0;
 
   const isChecking = panelMode === 'checking';
 
@@ -160,13 +169,23 @@ export default function BoidModal({
 
             {/* Bulk Check Panel */}
             <BulkCheckPanel 
-              savedBoids={savedBoids}
+              savedBoids={safeSavedBoids}
               ipoName={ipoName}
               webViewRef={webViewRef}
               visible={visible}
+              results={results}
+              setResults={setResults}
               onModeChange={setPanelMode}
               onWebViewMessage={onWebViewMessage}
+              autoCheckBoid={autoCheckBoid}
+              onAutoCheckComplete={() => setAutoCheckBoid(null)}
             />
+            
+            {/* 
+            <View style={{ padding: 10, backgroundColor: '#FFF3E0', marginBottom: 10, borderRadius: 5 }}>
+                 <Text style={{ textAlign: 'center', color: '#E65100' }}>⚠️ Bulk Check & Google Sign-In Disabled for Debugging</Text>
+            </View>
+            */}
 
             {/* Existing Features Section */}
             {!isChecking && (
@@ -185,7 +204,7 @@ export default function BoidModal({
 
                 {/* List of Saved BOIDs */}
                 <FlatList
-                  data={savedBoids}
+                  data={safeSavedBoids}
                   keyExtractor={(_, index) => index.toString()}
                   renderItem={renderItem}
                   scrollEnabled={false}
