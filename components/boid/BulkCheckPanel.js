@@ -9,14 +9,17 @@ import {
   Share,
   Modal,
   FlatList,
+  Image,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   generateCaptchaExtractionScript, 
   generateFinalSubmissionScript,
   generateCompanySelectionScript,
   reloadForFreshCaptcha, 
-  fetchIPOsDirectly 
+  fetchIPOsDirectly
 } from '../../utils/BulkCheckStrategy';
 import { getApiBaseUrl } from '../../utils/config';
 
@@ -28,12 +31,14 @@ export default function BulkCheckPanel({
   results,
   setResults,
   onModeChange,
-  onWebViewMessage, // The setter function from MainApp
-  autoCheckBoid, // NEW: Individual BOID to check automatically
-  onAutoCheckComplete // NEW: Callback when done
+  onWebViewMessage, 
+  autoCheckBoid, 
+  onAutoCheckComplete 
 }) {
-  const [viewMode, setViewMode] = useState('selection'); // 'selection' | 'checking' | 'results'
-  const [aiProvider, setAiProvider] = useState('jury'); // 'jury' (Masterpiece), 'gemini' (Free) or 'openai' (Paid)
+  const insets = useSafeAreaInsets();
+  const [viewMode, setViewMode] = useState('selection'); 
+
+
 
   // Notify parent when viewMode changes
   useEffect(() => {
@@ -43,7 +48,8 @@ export default function BulkCheckPanel({
   const [bulkCheckState, setBulkCheckState] = useState({
     progress: 0,
     currentIndex: 0,
-    currentCaptcha: null, // New field
+    currentCaptcha: null, 
+    currentCaptchaImage: null, // NEW: For zoomed display
     results: [],
     summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 }
   });
@@ -60,7 +66,14 @@ export default function BulkCheckPanel({
   const messageHandlerRef = useRef(null);
 
   // Dispatch message to the active handler
-  const handleWebViewMessage = (event) => {
+  const handleWebViewMessage = async (event) => {
+    let data;
+    try {
+      data = JSON.parse(event.nativeEvent.data);
+    } catch (e) { return; }
+
+
+
     if (messageHandlerRef.current) {
       messageHandlerRef.current(event);
     }
@@ -111,7 +124,14 @@ export default function BulkCheckPanel({
     for (let i = 0; i < targetBoids.length; i++) {
       const boidObj = targetBoids[i];
       const boidString = typeof boidObj === 'string' ? boidObj : boidObj.boid;
-      setBulkCheckState(prev => ({ ...prev, currentIndex: i, progress: Math.round((i / targetBoids.length) * 100) }));
+      // Clear previous captcha image when starting new BOID
+      setBulkCheckState(prev => ({ 
+        ...prev, 
+        currentIndex: i, 
+        progress: Math.round((i / targetBoids.length) * 100),
+        currentCaptchaImage: null,
+        currentCaptcha: null
+      }));
 
       let attempts = 0;
       const MAX_ATTEMPTS = 3;
@@ -134,8 +154,11 @@ export default function BulkCheckPanel({
 
           const extractionMsg = await waitForMessage('CAPTCHA_IMAGE_READY', boidString, 15000);
           
+          // Update UI with zoomed captcha image immediately
+          setBulkCheckState(prev => ({ ...prev, currentCaptchaImage: extractionMsg.imageBase64 }));
+          
           // STEP 2: Solve from RN - Send as actual file via FormData
-          console.log(`[Bulk] Step 2: Solving Captcha via ${aiProvider} for ${boidString}`);
+          console.log(`[Bulk] Step 2: Solving Captcha via CNN for ${boidString}`);
           console.log(`[Bulk] Image size: ${extractionMsg.imageSize} bytes, type: ${extractionMsg.mimeType}`);
           
           // Create FormData and append image file using React Native's file object format
@@ -145,7 +168,7 @@ export default function BulkCheckPanel({
             name: 'captcha.png',
             type: extractionMsg.mimeType
           });
-          formData.append('provider', aiProvider);
+
           
           const solveResponse = await fetch(`${API_URL}/captcha/solve`, {
             method: 'POST',
@@ -167,7 +190,7 @@ export default function BulkCheckPanel({
             throw new Error(`Server returned HTML instead of JSON (${solveResponse.status}). Please check if API URL "${API_URL}" is correct.`);
           }
           
-          if (!solveData.success) throw new Error(`${aiProvider} solve failed: ` + (solveData.error || 'Check backend logs'));
+          if (!solveData.success) throw new Error(`Solve failed: ` + (solveData.error || 'Check backend logs'));
 
           // Update UI with solved captcha
           console.log(`✅ [Bulk] Captcha solved: ${solveData.captchaText}`);
@@ -178,6 +201,14 @@ export default function BulkCheckPanel({
           // --- MANUAL FALLBACK TRIGGER ---
           // If captcha is obviously junk or we're on final retry and still unsure
           const looksInvalid = finalCaptcha.length !== 5;
+          
+          // If solve is invalid, retry automatically before asking user
+          if (looksInvalid && attempts < MAX_ATTEMPTS) {
+            console.log(`📡 [Bulk] AI solve looks invalid (${finalCaptcha}). Force retry ${attempts}/${MAX_ATTEMPTS}...`);
+            await sleep(1000); // Small pause for refresh
+            continue;
+          }
+
           if (looksInvalid || (attempts >= MAX_ATTEMPTS && !success)) {
             console.log(`📡 [Bulk] AI Uncertainty detected. Invoking Manual Fallback...`);
             
@@ -204,6 +235,25 @@ export default function BulkCheckPanel({
           webViewRef.current?.injectJavaScript(submitScript);
 
           const resultMsg = await waitForMessage('BULK_CHECK_RESULT', boidString, 20000);
+          console.log(`[Bulk] 📩 Result received for ${boidString}:`, JSON.stringify(resultMsg));
+          
+          // Check for captcha-specific errors from the site
+          const lowerError = (resultMsg.error || '').toLowerCase();
+          const isCaptchaError = resultMsg.status === 'error' && (
+            lowerError.includes('captcha') || 
+            lowerError.includes('try again') || 
+            lowerError.includes('incorrect')
+          );
+
+          if (isCaptchaError && attempts < MAX_ATTEMPTS) {
+            console.log(`⚠️ [Bulk] Captcha error detected. Status: ${resultMsg.status}, Error: ${resultMsg.error}. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
+            continue; // This will loop and refresh captcha
+          }
+
+          if (resultMsg.status === 'error') {
+            console.log(`🛑 [Bulk] Non-retryable error: ${resultMsg.error}`);
+          }
+
           handleResult(resultMsg);
           success = true; // Mark as done to break while loop
 
@@ -230,7 +280,7 @@ export default function BulkCheckPanel({
 
       // Pacing delay (respecting rate limits)
       if (i < targetBoids.length - 1) {
-        const delay = aiProvider === 'gemini' ? 6000 : 1000;
+        const delay = 1000;
         await sleep(delay);
       }
     }
@@ -268,9 +318,17 @@ export default function BulkCheckPanel({
     });
   };
 
+  const maskBoid = (boid) => {
+    if (!boid || boid.length < 16) return boid;
+    return boid.substring(0, 6) + '********' + boid.substring(14);
+  };
+
   const handleResult = (data) => {
+    const matchingBoid = savedBoids.find(b => b.boid === data.boid);
+    const nickname = matchingBoid?.nickname || 'Unknown';
+
     setBulkCheckState(prev => {
-      const newResults = [...prev.results, data];
+      const newResults = [...prev.results, { ...data, nickname }];
       const newSummary = {
         total: prev.summary.total,
         allotted: newResults.filter(r => r?.status === 'allotted').length,
@@ -289,11 +347,10 @@ export default function BulkCheckPanel({
     // Update parent global results for the list labels
     if (setResults && data.status !== 'error') {
       const resultText = data.status === 'allotted' 
-        ? `🎉 Congratulations! Alloted quantity : ${data.shares}` 
+        ? `🎉 Congratulations Alloted!!! Alloted quantity : ${data.shares}` 
         : `❌ Sorry, not alloted for the entered BOID.`;
 
       setResults((prevResults) => {
-        const matchingBoid = savedBoids.find(b => b.boid === data.boid);
         const index = prevResults.findIndex((item) => item.boid === data.boid);
         
         if (index >= 0) {
@@ -360,31 +417,6 @@ export default function BulkCheckPanel({
             </Text>
           </View>
           
-          {/* AI Provider Toggle */}
-          <View style={panelStyles.providerContainer}>
-            <Text style={panelStyles.providerLabel}>AI Engine:</Text>
-            <View style={panelStyles.toggleWrapper}>
-              <TouchableOpacity 
-                style={[panelStyles.toggleOption, aiProvider === 'jury' && panelStyles.toggleActive]}
-                onPress={() => setAiProvider('jury')}
-              >
-                <Text style={[panelStyles.toggleText, aiProvider === 'jury' && panelStyles.toggleTextActive]}>⚖️ Jury (Best)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[panelStyles.toggleOption, aiProvider === 'gemini' && panelStyles.toggleActive]}
-                onPress={() => setAiProvider('gemini')}
-              >
-                <Text style={[panelStyles.toggleText, aiProvider === 'gemini' && panelStyles.toggleTextActive]}>Gemini</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[panelStyles.toggleOption, aiProvider === 'openai' && panelStyles.toggleActive]}
-                onPress={() => setAiProvider('openai')}
-              >
-                <Text style={[panelStyles.toggleText, aiProvider === 'openai' && panelStyles.toggleTextActive]}>GPT-4o</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          
           <TouchableOpacity  
             style={panelStyles.bulkCheckButton}
             onPress={handleBulkCheck}
@@ -395,168 +427,203 @@ export default function BulkCheckPanel({
         </View>
       )}
 
-      {/* 2. PROGRESS / CHECKING MODE */}
-      {viewMode === 'checking' && (
-        <View style={panelStyles.progressContainer}>
-          <Text style={panelStyles.progressText}>
-            Checking IPO Results... {bulkCheckState.progress}%
-          </Text>
-          <View style={panelStyles.progressBar}>
-            <View 
-              style={[
-                panelStyles.progressFill, 
-                { width: `${bulkCheckState.progress}%` }
-              ]} 
-            />
-          </View>
-          <Text style={panelStyles.progressDetail}>
-            Checking {bulkCheckState.currentIndex + 1} of {savedBoids.length}
-          </Text>
-        </View>
-      )}
+      {/* 2. FULL SCREEN MODAL for CHECKING & RESULTS */}
+      <Modal 
+        visible={viewMode === 'checking' || viewMode === 'results'} 
+        animationType="slide"
+        onRequestClose={() => {
+            if (viewMode === 'results') setViewMode('selection');
+        }}
+      >
+        <View style={[panelStyles.fsContainer, { paddingTop: insets.top }]}>
+          {/* Header */}
+          <View style={panelStyles.fsHeader}>
+             <View>
+               <Text style={panelStyles.fsTitle}>
+                 {viewMode === 'checking' ? 'Bulk Check in Progress...' : 'Check Complete!'}
+               </Text>
 
-      {/* 3. RESULTS DISPLAY (Shown during checking and after finish) */}
-      {(viewMode === 'checking' || viewMode === 'results') && (
-        <View style={panelStyles.resultsContainer}>
-          <View style={panelStyles.resultsHeader}>
-            <Text style={panelStyles.resultsTitle}>
-              {viewMode === 'checking' ? 'Progress' : 'Checking Complete!'}
-            </Text>
-            {viewMode === 'results' && (
-              <TouchableOpacity onPress={exportToCSV} style={panelStyles.exportButton}>
-                <Ionicons name="download-outline" size={18} color="#6200EE" />
-                <Text style={panelStyles.exportText}>Export</Text>
-              </TouchableOpacity>
-            )}
+             </View>
+             
+             {viewMode === 'results' && (
+               <TouchableOpacity onPress={() => setViewMode('selection')}>
+                 <Ionicons name="close" size={24} color="#333" />
+               </TouchableOpacity>
+             )}
           </View>
 
-          <View style={panelStyles.summaryRow}>
-            <View style={panelStyles.summaryItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-              <Text style={panelStyles.summaryText}>{bulkCheckState.summary.allotted} Allotted</Text>
-            </View>
-            <View style={panelStyles.summaryItem}>
-              <Ionicons name="close-circle" size={16} color="#F44336" />
-              <Text style={panelStyles.summaryText}>{bulkCheckState.summary.notAllotted} Not Allotted</Text>
-            </View>
-            {bulkCheckState.summary.totalShares > 0 && (
-              <View style={panelStyles.summaryItem}>
-                <Ionicons name="stats-chart" size={16} color="#6200EE" />
-                <Text style={[panelStyles.summaryText, { fontWeight: 'bold', color: '#6200EE' }]}>
-                  {bulkCheckState.summary.totalShares} Total Shares
-                </Text>
-              </View>
-            )}
+          {/* Progress Bar */}
+          <View style={panelStyles.fsProgressContainer}>
+              <View style={[panelStyles.fsProgressFill, { width: `${bulkCheckState.progress}%` }]} />
           </View>
 
-          <ScrollView style={panelStyles.resultsList}>
-            {bulkCheckState.results.map((result, index) => (
-              <View key={index} style={panelStyles.resultItem}>
-                {getStatusIcon(result.status)}
-                <View style={panelStyles.resultDetails}>
-                  <Text style={panelStyles.resultBoid}>{result.boid}</Text>
-                  <Text style={panelStyles.resultStatus}>
-                    {result.status === 'allotted' 
-                      ? `✅ ${result.message || `${result.shares} shares`}` 
-                      : result.status === 'not-allotted'
-                      ? `❌ ${result.message || 'Not allotted'}`
-                      : `⚠️ ${result.error}`}
-                  </Text>
-                </View>
-              </View>
-            ))}
-            {viewMode === 'checking' && (
-              <View style={panelStyles.checkingIndicator}>
-                 <ActivityIndicator size="small" color="#6200EE" />
-                 <View>
-                    <Text style={panelStyles.checkingIndicatorText}>Processing next BOID...</Text>
+          {/* Current Status / Captcha */}
+          {viewMode === 'checking' && (
+            <View style={panelStyles.fsStatusSection}>
+               <Text style={panelStyles.fsStatusText}>
+                 Checking {bulkCheckState.currentIndex + 1} of {savedBoids.length}
+               </Text>
+               <Text style={panelStyles.fsNickname}>
+                 {savedBoids[bulkCheckState.currentIndex]?.nickname || savedBoids[bulkCheckState.currentIndex]?.boid || '...'}
+               </Text>
+               
+               {bulkCheckState.currentCaptchaImage ? (
+                 <View style={panelStyles.fsCaptchaContainer}>
+                    <Text style={panelStyles.fsCaptchaLabel}>Solving Captcha:</Text>
+                    <Image 
+                      source={{ uri: `data:image/png;base64,${bulkCheckState.currentCaptchaImage}` }} 
+                      style={panelStyles.fsCaptchaImage}
+                      resizeMode="contain"
+                    />
                     {bulkCheckState.currentCaptcha && (
-                      <Text style={panelStyles.captchaFeedback}>
-                        {aiProvider.charAt(0).toUpperCase() + aiProvider.slice(1)} Solved: <Text style={panelStyles.captchaCode}>{bulkCheckState.currentCaptcha}</Text>
-                      </Text>
+                      <Text style={panelStyles.fsCaptchaSolved}>Input: {bulkCheckState.currentCaptcha}</Text>
                     )}
                  </View>
-              </View>
-            )}
-          </ScrollView>
+               ) : (
+                 <View style={{alignItems: 'center', marginVertical: 20}}>
+                    <ActivityIndicator size="large" color="#6200EE" />
+                    <Text style={{color: '#666', marginTop: 10}}>Extracting Captcha...</Text>
+                 </View>
+               )}
+            </View>
+          )}
 
+          {/* Results List */}
+          <View style={panelStyles.fsListContainer}>
+             <View style={panelStyles.summaryRow}>
+                <View style={panelStyles.summaryItem}>
+                  <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+                  <Text style={panelStyles.summaryText}>{bulkCheckState.summary.allotted} Allotted</Text>
+                </View>
+                <View style={panelStyles.summaryItem}>
+                  <Ionicons name="close-circle" size={16} color="#F44336" />
+                  <Text style={panelStyles.summaryText}>{bulkCheckState.summary.notAllotted} Not Allotted</Text>
+                </View>
+                {bulkCheckState.summary.totalShares > 0 && (
+                  <View style={panelStyles.summaryItem}>
+                    <Ionicons name="stats-chart" size={16} color="#6200EE" />
+                    <Text style={[panelStyles.summaryText, { fontWeight: 'bold', color: '#6200EE' }]}>
+                      {bulkCheckState.summary.totalShares} Shares
+                    </Text>
+                  </View>
+                )}
+             </View>
+             
+             <FlatList 
+               data={bulkCheckState.results}
+               keyExtractor={(item, index) => index.toString()}
+               renderItem={({ item }) => (
+                 <View style={panelStyles.resultItem}>
+                    {getStatusIcon(item.status)}
+                    <View style={panelStyles.resultDetails}>
+                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                         <Text style={panelStyles.resultBoid}>{maskBoid(item.boid)}</Text>
+                         <Text style={panelStyles.resultNickname}>{item.nickname}</Text>
+                       </View>
+                       <Text style={panelStyles.resultStatus}>
+                         {item.status === 'allotted' 
+                           ? `✅ ${item.message || `${item.shares} shares`}` 
+                           : item.status === 'not-allotted'
+                           ? `❌ ${item.message || 'Not allotted'}`
+                           : `⚠️ ${item.error}`}
+                       </Text>
+                    </View>
+                 </View>
+               )}
+               contentContainerStyle={{ paddingBottom: 20 }}
+             />
+          </View>
+
+          {/* Footer Actions (Export/Done) */}
           {viewMode === 'results' && (
-            <TouchableOpacity 
-              style={panelStyles.doneButton}
-              onPress={() => {
-                setViewMode('selection');
-                setBulkCheckState({
-                  progress: 0,
-                  currentIndex: 0,
-                  results: [],
-                  summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0 }
-                });
-              }}
-            >
-              <Text style={panelStyles.doneButtonText}>Done / Check Another</Text>
-            </TouchableOpacity>
+             <View style={[panelStyles.fsFooter, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
+               <TouchableOpacity onPress={exportToCSV} style={panelStyles.exportButtonOutlined}>
+                  <Ionicons name="download-outline" size={18} color="#6200EE" />
+                  <Text style={{color:'#6200EE', fontWeight: '600', marginLeft: 4}}>Export CSV</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                 onPress={() => {
+                   setViewMode('selection');
+                   // Create a new blank state
+                   setBulkCheckState({
+                      progress: 0,
+                      currentIndex: 0,
+                      currentCaptcha: null,
+                      currentCaptchaImage: null,
+                      results: [],
+                      summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 }
+                   });
+                 }} 
+                 style={panelStyles.doneButtonFull}
+               >
+                  <Text style={{color:'white', fontWeight:'bold', fontSize: 16}}>Done</Text>
+               </TouchableOpacity>
+             </View>
           )}
         </View>
-      )}
 
-      {/* 4. MANUAL FALLBACK OVERLAY (Safe "Non-Modal" Implementation) */}
-      {manualPrompt.visible && (
-        <View style={[StyleSheet.absoluteFill, panelStyles.manualModalOverlay, { elevation: 100, zIndex: 100 }]}>
-          <View style={panelStyles.manualModalContent}>
-            <View style={panelStyles.manualHeader}>
-              <Ionicons name="eye" size={24} color="#6200EE" />
-              <Text style={panelStyles.manualTitle}>AI is unsure. Help required!</Text>
-            </View>
-            
-            <Text style={panelStyles.manualSubtitle}>Please solve this captcha for BOID ending in ...{manualPrompt.boid.slice(-4)}</Text>
-            
-            {manualPrompt.imageBase64 && (
-              <View style={panelStyles.captchaDisplayContainer}>
-                <View style={panelStyles.captchaFrame}>
-                    <Text style={{fontSize: 30, letterSpacing: 4, fontWeight: 'bold'}}>{manualInput || '_____'}</Text>
-                    <ActivityIndicator size="small" color="#6200EE" style={{position:'absolute', right: 10}} />
-                </View>
-                <Text style={panelStyles.noticeText}>Check the website above the modal! (It has the image)</Text>
+        {/* 4. MANUAL FALLBACK OVERLAY (Inside Modal) */}
+        {manualPrompt.visible && (
+          <View style={[StyleSheet.absoluteFill, panelStyles.manualModalOverlay, { elevation: 100, zIndex: 100 }]}>
+            <View style={panelStyles.manualModalContent}>
+              <View style={panelStyles.manualHeader}>
+                <Ionicons name="eye" size={24} color="#6200EE" />
+                <Text style={panelStyles.manualTitle}>Help AI</Text>
               </View>
-            )}
-
-            <TextInput
-              style={panelStyles.manualInput}
-              placeholder="Enter 5 Digits"
-              keyboardType="number-pad"
-              maxLength={5}
-              value={manualInput}
-              onChangeText={setManualInput}
-              autoFocus
-            />
-
-            <View style={panelStyles.manualActions}>
-              <TouchableOpacity 
-                style={panelStyles.manualCancel}
-                onPress={() => {
-                  manualPrompt.resolvePromise(null);
-                  setManualPrompt(prev => ({ ...prev, visible: false }));
-                  setManualInput('');
-                }}
-              >
-                <Text style={panelStyles.manualCancelText}>Skip</Text>
-              </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[panelStyles.manualSubmit, manualInput.length !== 5 && panelStyles.manualSubmitDisabled]}
-                disabled={manualInput.length !== 5}
-                onPress={() => {
-                  manualPrompt.resolvePromise(manualInput);
-                  setManualPrompt(prev => ({ ...prev, visible: false }));
-                  setManualInput('');
-                }}
-              >
-                <Text style={panelStyles.manualSubmitText}>Submit & Resume</Text>
-              </TouchableOpacity>
+              <Text style={panelStyles.manualSubtitle}>Solve for ...{manualPrompt.boid.slice(-4)}</Text>
+              
+              {manualPrompt.imageBase64 && (
+                <View style={panelStyles.captchaDisplayContainer}>
+                   <Image 
+                      source={{ uri: `data:image/png;base64,${manualPrompt.imageBase64}` }} 
+                      style={{ width: 150, height: 60, resizeMode: 'contain', marginBottom: 10 }}
+                   />
+                  <View style={panelStyles.captchaFrame}>
+                      <Text style={{fontSize: 30, letterSpacing: 4, fontWeight: 'bold'}}>{manualInput || '_____'}</Text>
+                  </View>
+                </View>
+              )}
+
+              <TextInput
+                style={panelStyles.manualInput}
+                placeholder="Enter 5 Digits"
+                keyboardType="number-pad"
+                maxLength={5}
+                value={manualInput}
+                onChangeText={setManualInput}
+                autoFocus
+              />
+
+              <View style={panelStyles.manualActions}>
+                <TouchableOpacity 
+                  style={panelStyles.manualCancel}
+                  onPress={() => {
+                    manualPrompt.resolvePromise(null);
+                    setManualPrompt(prev => ({ ...prev, visible: false }));
+                    setManualInput('');
+                  }}
+                >
+                  <Text style={panelStyles.manualCancelText}>Skip</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[panelStyles.manualSubmit, manualInput.length !== 5 && panelStyles.manualSubmitDisabled]}
+                  disabled={manualInput.length !== 5}
+                  onPress={() => {
+                    manualPrompt.resolvePromise(manualInput);
+                    setManualPrompt(prev => ({ ...prev, visible: false }));
+                    setManualInput('');
+                  }}
+                >
+                  <Text style={panelStyles.manualSubmitText}>Submit</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )}
+      </Modal>
+
     </View>
   );
 }
@@ -860,5 +927,124 @@ const panelStyles = StyleSheet.create({
   manualSubmitText: {
     color: 'white',
     fontWeight: 'bold',
+  },
+  // Full Screen Modal Styles
+  fsContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  fsHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  fsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  fsProgressContainer: {
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    width: '100%',
+  },
+  fsProgressFill: {
+    height: '100%',
+    backgroundColor: '#6200EE',
+  },
+  fsStatusSection: {
+    backgroundColor: 'white',
+    padding: 20,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    marginBottom: 10,
+  },
+  fsStatusText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  fsNickname: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 15,
+  },
+  fsCaptchaContainer: {
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    width: '100%',
+  },
+  fsCaptchaLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: '600',
+  },
+  fsCaptchaImage: {
+    width: 200,
+    height: 80,
+    marginBottom: 10,
+    backgroundColor: 'white',
+    borderRadius: 4,
+  },
+  fsCaptchaSolved: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#10B981',
+  },
+  fsListContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+  },
+  fsFooter: {
+    padding: 20,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  exportButtonOutlined: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6200EE',
+    backgroundColor: 'white',
+  },
+  doneButtonFull: {
+    flex: 2,
+    backgroundColor: '#6200EE',
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultNickname: {
+    fontSize: 12,
+    color: '#6200EE',
+    fontWeight: 'bold',
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
 });

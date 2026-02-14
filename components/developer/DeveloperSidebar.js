@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
 import { getApiBaseUrl } from '../../utils/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generateDOMInspectionScript } from '../../utils/diagnosticScripts';
 
 // Import your profile picture
 import ProfilePic from '../../assets/profile.jpg';
@@ -71,6 +72,9 @@ export default function DeveloperSidebar({
   const [harvestCount, setHarvestCount] = useState(0);
   const [currentCaptcha, setCurrentCaptcha] = useState(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  
+  // DOM Inspection State
+  const [selectedCondition, setSelectedCondition] = useState('NOT_ALLOTTED'); // NOT_ALLOTTED, ALLOTTED, INVALID_CAPTCHA
 
   // In-memory script for Zoom & Focus
   const zoomScript = `
@@ -286,6 +290,48 @@ export default function DeveloperSidebar({
       if (data.type === 'HARVEST_CAPTCHA_IMAGE') {
         setCurrentCaptcha(`data:image/png;base64,${data.imageBase64}`);
         setIsExtracting(false);
+      } else if (data.type === 'DOM_INSPECTION_RESULT') {
+        console.log('🔍 [DOM INSPECTION] Found', data.data.patterns.length, 'patterns');
+        
+        // Automatically save to backend
+        fetch(`${getEffectiveApiUrl()}/dataset/save-inspection`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            condition: selectedCondition,
+            data: data.data
+          })
+        })
+        .then(res => res.json())
+        .then(saveResult => {
+          console.log('✅ Saved to backend:', saveResult);
+          
+          // Format results for display
+          let message = `Condition: ${selectedCondition}\n`;
+          message += `Found ${data.data.patterns.length} matching elements\n\n`;
+          
+          if (data.data.patterns.length > 0) {
+            data.data.patterns.forEach((pattern, idx) => {
+              message += `${idx + 1}. ${pattern.patternName}\n`;
+              message += `   Text: "${pattern.text.substring(0, 60)}..."\n`;
+              message += `   Tag: <${pattern.tagName.toLowerCase()}${pattern.className ? ' class="' + pattern.className + '"' : ''}>\n\n`;
+            });
+          } else {
+            message += 'No matching patterns found.\n';
+            message += 'Make sure the message is visible on screen.';
+          }
+          
+          message += `\n✅ Results saved to backend!`;
+          
+          Alert.alert('🔍 DOM Inspection Complete', message);
+        })
+        .catch(err => {
+          console.error('❌ Failed to save to backend:', err);
+          Alert.alert('Error', 'Failed to save results to backend');
+        });
+        
+        // Also log full details to console
+        console.log('📊 Full inspection data:', JSON.stringify(data.data, null, 2));
       } else if (data.type === 'DOM_DIAGNOSTICS') {
         console.log('📡 [DOM DEBUG] Result:', data.info);
         
@@ -445,6 +491,22 @@ export default function DeveloperSidebar({
     webViewRef.current?.injectJavaScript(scanScript);
   };
 
+  const inspectTextElements = () => {
+    const conditionNames = {
+      'NOT_ALLOTTED': 'Not Allotted Message',
+      'ALLOTTED': 'Allotted Message',
+      'INVALID_CAPTCHA': 'Invalid Captcha Error'
+    };
+    
+    const inspectionScript = generateDOMInspectionScript();
+    webViewRef.current?.injectJavaScript(inspectionScript);
+    
+    Alert.alert(
+      '🔍 DOM Inspection Started', 
+      `Scanning for: ${conditionNames[selectedCondition]}\n\nMake sure the message is visible on screen!\n\nResults will be saved automatically.`
+    );
+  };
+
   useEffect(() => {
     if (visible && isHarvesting) {
         onWebViewMessage(() => handleInAppMessage);
@@ -572,6 +634,40 @@ export default function DeveloperSidebar({
                 >
                   <Ionicons name="search" size={20} color="white" />
                   <Text style={styles.syncButtonText}>SCAN REFRESH BUTTON</Text>
+                </TouchableOpacity>
+
+               {/* DOM Inspection Section */}
+               <View style={{ marginTop: 20, marginBottom: 10 }}>
+                 <Text style={styles.sectionHeader}>🔍 DOM Inspection</Text>
+                 <Text style={styles.inputLabel}>SELECT CONDITION TO SCAN</Text>
+                 <View style={styles.toggleWrapper}>
+                   <TouchableOpacity 
+                     style={[styles.toggleOption, selectedCondition === 'NOT_ALLOTTED' && styles.toggleActive]}
+                     onPress={() => setSelectedCondition('NOT_ALLOTTED')}
+                   >
+                     <Text style={[styles.toggleText, selectedCondition === 'NOT_ALLOTTED' && styles.toggleTextActive]}>❌ Not Allotted</Text>
+                   </TouchableOpacity>
+                   <TouchableOpacity 
+                     style={[styles.toggleOption, selectedCondition === 'ALLOTTED' && styles.toggleActive]}
+                     onPress={() => setSelectedCondition('ALLOTTED')}
+                   >
+                     <Text style={[styles.toggleText, selectedCondition === 'ALLOTTED' && styles.toggleTextActive]}>🎉 Allotted</Text>
+                   </TouchableOpacity>
+                   <TouchableOpacity 
+                     style={[styles.toggleOption, selectedCondition === 'INVALID_CAPTCHA' && styles.toggleActive]}
+                     onPress={() => setSelectedCondition('INVALID_CAPTCHA')}
+                   >
+                     <Text style={[styles.toggleText, selectedCondition === 'INVALID_CAPTCHA' && styles.toggleTextActive]}>⚠️ Invalid</Text>
+                   </TouchableOpacity>
+                 </View>
+               </View>
+
+               <TouchableOpacity 
+                  style={[styles.syncButton, { backgroundColor: '#FF5722', marginTop: 10 }]} 
+                  onPress={inspectTextElements}
+                >
+                  <Ionicons name="search-outline" size={20} color="white" />
+                  <Text style={styles.syncButtonText}>SCAN CURRENT CONDITION</Text>
                 </TouchableOpacity>
 
                <View style={styles.overrideBox}>

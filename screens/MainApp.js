@@ -103,14 +103,15 @@ export default function MainApp() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#343a40' }}>
+    <View style={{ flex: 1, backgroundColor: '#333a56' }}>
       {/* WebView */}
-      <View style={{ flex: 1, display: showUpcomingIpos ? 'none' : 'flex' }}>
+      <View style={{ flex: 1, display: showUpcomingIpos ? 'none' : 'flex', paddingBottom: 64 + insets.bottom }}>
         <WebViewContainer
           ref={webViewRef}
           currentUrl={currentUrl}
           onResultExtracted={handleResultExtracted}
           onMessage={(e) => onWebViewMessage?.(e)}
+          topInset={insets.top} // Pass safe area top inset
         />
       </View>
 
@@ -132,9 +133,7 @@ export default function MainApp() {
       )}
 
       {/* Bottom Navigation Bar */}
-      <View
-        style={[localStyles.bottomNavWrapper, { paddingBottom: insets.bottom }]}
-      >
+      <View style={localStyles.bottomNavWrapper}>
         <BottomNavBar
           onOpenBoidModal={() => {
             if (showUpcomingIpos) {

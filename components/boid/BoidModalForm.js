@@ -1,4 +1,3 @@
-// components/main/BoidModalForm.js
 import React from 'react';
 import {
   View,
@@ -19,14 +18,26 @@ export default function BoidModalForm({
 }) {
   return (
     <View>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter 16-digit BOID starting with 13"
-        keyboardType="numeric"
-        maxLength={16}
-        value={boidInput}
-        onChangeText={setBoidInput}
-      />
+      <View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter 16-digit BOID starting with 13"
+          keyboardType="numeric"
+          maxLength={16}
+          value={boidInput}
+          onChangeText={setBoidInput}
+        />
+        <Text style={{ 
+          position: 'absolute', 
+          right: 15, 
+          top: 15, 
+          fontSize: 12, 
+          color: boidInput.length === 16 ? '#4CAF50' : '#888'
+        }}>
+          {boidInput.length}/16
+        </Text>
+      </View>
+      
       <TextInput
         style={styles.input}
         placeholder="Enter Nickname (optional)"

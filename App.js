@@ -1,30 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context'; 
-import * as SplashScreenModule from 'expo-splash-screen'; // Rename to avoid conflict with component
+import * as SplashScreenModule from 'expo-splash-screen'; 
 
-import CustomSplashScreen from './components/SplashScreen.js'; // Rename import for clarity
 import MainApp from './screens/MainApp.js';
 import Toast from 'react-native-toast-message';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenModule.preventAutoHideAsync();
 
-
 export default function App() {
-  const [isSplashFinished, setIsSplashFinished] = useState(false);
-
   React.useEffect(() => {
-    // Hide the native splash screen immediately so our video can play
-    SplashScreenModule.hideAsync();
+    // Keep splash screen visible for 2 seconds to show logo
+    const timer = setTimeout(async () => {
+      await SplashScreenModule.hideAsync();
+    }, 2000);
+    return () => clearTimeout(timer);
   }, []);
 
-  if (!isSplashFinished) {
-    // While splash is not finished, show CustomSplashScreen
-    return <CustomSplashScreen onFinish={() => setIsSplashFinished(true)} />;
-  }
-
-  // After splash is finished, wrap everything in SafeAreaProvider
   return (
     <SafeAreaProvider>
       <View style={styles.container}>

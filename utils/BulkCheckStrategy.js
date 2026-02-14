@@ -343,82 +343,58 @@ export const generateFinalSubmissionScript = (boid, captchaText) => {
     
     console.log('📤 Form submitted, waiting for response...');
     
-    // Wait for response - the page will show either a modal or inline message
-    await sleep(4000);
+    // Use the EXACT same logic as manual check (from WebViewContainer.js)
+    await sleep(1000); // Same 1-second delay as manual check
     
-    // === COMPREHENSIVE TEXT EXTRACTION ===
-    const getAllVisibleText = () => {
-      const elements = document.querySelectorAll('p, div, span, h1, h2, b, i, .text-danger, .modal-body');
-      const visibleTexts = [];
+    const body = document.body.innerText.toLowerCase();
+    let result = "No result found";
+    let status = 'error';
+    let shares = 0;
+    
+    if (body.includes("congrat")) {
+      result = "🎉 Congratulations Alloted!!!";
+      status = 'allotted';
       
-      elements.forEach(el => {
-        if (el.offsetParent === null) return; // Hidden
-        const text = el.textContent.trim();
-        if (text && text.length > 0 && !visibleTexts.includes(text)) {
-          visibleTexts.push(text);
-        }
-      });
+      // Extract quantity if present
+      const qMatch = body.match(/quantity.*?(\\d+)/i) || body.match(/(\\d+)\\s*shares?/i);
+      if (qMatch) {
+        shares = parseInt(qMatch[1]);
+        result = \`🎉 Congratulations Alloted!!! Alloted quantity : \${shares}\`;
+      }
       
-      return visibleTexts.join(' | ');
-    };
-    
-    const allVisibleText = getAllVisibleText();
-    const lowerText = allVisibleText.toLowerCase();
-    
-    console.log('📋 Full Text:', allVisibleText);
-    
-    // === 1. DETECT ERROR (RETRYABLE) ===
-    // User provided exact pattern: <b ...>Invalid Captcha Provided. Please try again </b>
-    const errorKeywords = ['invalid captcha', 'incorrect', 'try again', 'mismatch', 'wrong'];
-    const hasError = errorKeywords.some(word => lowerText.includes(word));
-    
-    if (hasError) {
-      // Find the specific error fragment
-      const fragments = allVisibleText.split('|');
-      const errorMsg = fragments.find(f => errorKeywords.some(w => f.toLowerCase().includes(w))) || 'Invalid Captcha Provided. Please try again';
-      
-      console.log('🚫 Submission Error:', errorMsg);
-      // We throw "Captcha Error" to signal BulkCheckPanel.js to increment attempts and refresh
-      throw new Error('Captcha Error: ' + errorMsg.trim());
-    }
-    
-    // === 2. DETECT ALLOTTED ===
-    if (lowerText.includes('congratulation') || lowerText.includes('alloted')) {
-      const sharesMatch = allVisibleText.match(/(\d+)\s*shares?/i) || allVisibleText.match(/quantity\s*:?\s*(\d+)/i);
-      const shares = sharesMatch ? parseInt(sharesMatch[1]) : 0;
-      
-      const message = allVisibleText.match(/congratulation[^|]*/i)?.[0] || '🎉 Allotted';
-      
+      console.log('✅ ALLOTTED:', result);
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'BULK_CHECK_RESULT',
         boid: '${boid}',
-        status: 'allotted',
+        status: status,
         shares: shares,
-        message: message.trim(),
+        message: result,
         success: true,
         timestamp: new Date().toISOString()
       }));
       return;
-    }
-    
-    // === 3. DETECT NOT ALLOTTED ===
-    if (lowerText.includes('not alloted') || lowerText.includes('sorry')) {
-      const message = allVisibleText.match(/sorry[^|]*/i)?.[0] || '❌ Not allotted';
+    } else if (body.includes("sorry")) {
+      result = "❌ Sorry, not alloted for the entered BOID.";
+      status = 'not-allotted';
       
+      console.log('❌ NOT ALLOTTED:', result);
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'BULK_CHECK_RESULT',
         boid: '${boid}',
-        status: 'not-allotted',
-        message: message.trim(),
+        status: status,
+        message: result,
         success: true,
         timestamp: new Date().toISOString()
       }));
       return;
+    } else if (body.includes("invalid captcha") || body.includes("try again")) {
+      console.log('🔄 CAPTCHA ERROR - Will retry');
+      throw new Error('Captcha Error: Invalid Captcha or Try Again');
+    } else {
+      // No clear result found
+      console.log('⚠️ NO CLEAR RESULT:', body.substring(0, 100));
+      throw new Error('Result not found');
     }
-    
-    // === 4. FALLBACK ===
-    const cleanText = allVisibleText.replace(/Check Share Result|Select company|View Result/g, '').replace(/\|/g, ' ').trim();
-    throw new Error('Captcha Error (Unknown Response): ' + cleanText.substring(0, 200));
 
   } catch (error) {
     console.error('Submission error:', error.message);
@@ -440,5 +416,7 @@ export const generateFinalSubmissionScript = (boid, captchaText) => {
 export const reloadForFreshCaptcha = () => {
   return `window.location.reload(); true;`;
 };
+
+
 
 

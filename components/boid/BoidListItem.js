@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Share, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,10 +10,11 @@ export default function BoidListItem({
   index,
   result,
   fillBoid,
-  autoCheck, // New prop
+  autoCheck, 
   deleteBoid,
   startEdit,
 }) {
+  const [isVisible, setIsVisible] = useState(false);
   const isAllotted = typeof result === 'string' && result.toLowerCase().includes('congrat');
 
   const handleShare = async () => {
@@ -40,6 +41,13 @@ export default function BoidListItem({
     } else {
        alert('BOID copied to clipboard');
     }
+  };
+
+  // Mask logic: First 6 visible, then 8 stars, last 2 visible
+  // Total 16 digits. Ex: 130100********14
+  const getMaskedBoid = (boid) => {
+    if (!boid || boid.length < 16) return boid;
+    return boid.substring(0, 6) + '********' + boid.substring(14);
   };
 
   return (
@@ -71,7 +79,17 @@ export default function BoidListItem({
         <Text style={styles.nicknameText}>
           {item.nickname || 'No nickname'}
         </Text>
-        <Text style={styles.boidCodeText}>{item.boid}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={styles.boidCodeText}>
+            {isVisible ? item.boid : getMaskedBoid(item.boid)}
+          </Text>
+          <TouchableOpacity 
+            onPress={() => setIsVisible(!isVisible)} 
+            style={{ marginLeft: 8, padding: 4 }}
+          >
+             <Ionicons name={isVisible ? "eye-off-outline" : "eye-outline"} size={16} color="#666" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Actions */}
