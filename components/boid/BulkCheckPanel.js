@@ -28,6 +28,7 @@ import {
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getApiBaseUrl } from '../../utils/config';
 
@@ -78,7 +79,8 @@ export default function BulkCheckPanel({
     imageBase64: null,
     boid: '',
     nickname: '',
-    resolvePromise: null
+    resolvePromise: null,
+    error: ''
   });
   const [manualInput, setManualInput] = useState('');
 
@@ -237,7 +239,8 @@ export default function BulkCheckPanel({
                 imageBase64: extractionMsg.imageBase64,
                 boid: boidString,
                 nickname: boidObj?.nickname || 'Unknown',
-                resolvePromise: resolve
+                resolvePromise: resolve,
+                error: attempts > 1 ? 'Incorrect captcha. Please try again.' : ''
               });
             });
             
@@ -245,7 +248,15 @@ export default function BulkCheckPanel({
               finalCaptcha = manualCode;
               console.log(`🧑‍💻 [Manual] User provided code: ${finalCaptcha}`);
             } else {
-              throw new Error('Manual entry cancelled');
+              // Mark as skipped instead of error
+              handleResult({
+                boid: boidString,
+                nickname: boidObj?.nickname || 'Unknown',
+                status: 'skipped',
+                success: false
+              });
+              success = true; // Break retry loop
+              continue;
             }
           }
 
@@ -271,21 +282,19 @@ export default function BulkCheckPanel({
                 continue; 
              } else {
                 console.log(`📡 [Bulk] 3 failures reached. Switching to Manual Fallback for current BOID...`);
-                // Trigger manual entry on 3rd failure
                 const manualCode = await new Promise((resolve) => {
                   setManualPrompt({
                     visible: true,
                     imageBase64: extractionMsg.imageBase64,
                     boid: boidString,
                     nickname: boidObj?.nickname || 'Unknown',
-                    resolvePromise: resolve
+                    resolvePromise: resolve,
+                    error: 'Incorrect captcha. Please try again.'
                   });
                 });
                 
                 if (manualCode) {
                   console.log(`🧑‍💻 [Manual] User provided code after 3 attempts: ${manualCode}`);
-                  // We need to re-submit with the manual code
-                  // Re-inject the submission script and wait for result again
                   const subScript = generateFinalSubmissionScript(boidString, manualCode);
                   webViewRef.current?.injectJavaScript(subScript);
                   const manualResult = await waitForMessage('BULK_CHECK_RESULT', boidString, 20000);
@@ -293,36 +302,31 @@ export default function BulkCheckPanel({
                   success = true;
                   continue;
                 } else {
-                  throw new Error('Manual entry cancelled after 3 attempts');
+                  // Mark as skipped
+                  handleResult({
+                    boid: boidString,
+                    nickname: boidObj?.nickname || 'Unknown',
+                    status: 'skipped',
+                    success: false
+                  });
+                  success = true;
+                  continue;
                 }
              }
-          }
-
-          if (resultMsg.status === 'error') {
-            console.log(`🛑 [Bulk] Non-retryable error: ${resultMsg.error}`);
           }
 
           handleResult(resultMsg);
           success = true; // Mark as done to break while loop
 
-        } catch (error) {
-          console.warn(`[Bulk] Attempt ${attempts} failed for ${boidString}:`, error.message);
-          
-          // If all attempts failed OR if it's a non-captcha error, stop and report
-          const isCaptchaError = error.message.includes('Captcha');
-          
-          if (!isCaptchaError || attempts >= MAX_ATTEMPTS) {
-            handleResult({
-              boid: boidString,
-              status: 'error',
-              error: error.message,
-              success: false
-            });
-            break; // Stop retrying this BOID
-          }
-          
-          // Wait a bit before retrying to let the site settle
-          await sleep(2000);
+        } catch (err) {
+          console.error(`❌ [Bulk] Loop Error for ${boidString}:`, err);
+          handleResult({
+            boid: boidString,
+            status: 'error',
+            error: err.message,
+            success: false
+          });
+          success = true;
         }
       }
 
@@ -389,25 +393,48 @@ export default function BulkCheckPanel({
 
   const handleShareResult = async () => {
     try {
-      if (!capturedImageUri) return;
+      console.log('📤 Starting share process. URI:', capturedImageUri);
+      if (!capturedImageUri) {
+        Toast.show({
+          type: 'error',
+          text1: 'No image found',
+          text2: 'Please wait for the report to generate.'
+        });
+        return;
+      }
+
       setIsSharing(true);
 
       if (!(await Sharing.isAvailableAsync())) {
         Toast.show({
           type: 'error',
           text1: 'Sharing not available',
-          text2: 'Could not share the result image'
+          text2: 'Your device does not support sharing.'
         });
         return;
       }
 
-      await Sharing.shareAsync(capturedImageUri, {
+      let sharePath = capturedImageUri;
+      try {
+        // Attempt to rename for a professional experience
+        const customPath = `${FileSystem.cacheDirectory}Ipo_result.png`;
+        await FileSystem.copyAsync({
+          from: capturedImageUri,
+          to: customPath
+        });
+        sharePath = customPath;
+        console.log('✅ Renamed image for sharing:', sharePath);
+      } catch (copyErr) {
+        console.warn('⚠️ Rename failed, falling back to original URI:', copyErr.message);
+      }
+
+      await Sharing.shareAsync(sharePath, {
         mimeType: 'image/png',
         dialogTitle: 'Share IPO Results',
         UTI: 'public.png',
       });
     } catch (err) {
-      console.error('Share error:', err);
+      console.error('❌ Share error:', err);
       Toast.show({
         type: 'error',
         text1: 'Sharing Failed',
@@ -455,22 +482,51 @@ export default function BulkCheckPanel({
 
   const handleResult = (data) => {
     const matchingBoid = savedBoids.find(b => b.boid === data.boid);
-    const nickname = matchingBoid?.nickname || 'Unknown';
+    const nickname = matchingBoid?.nickname || data.nickname || 'Unknown';
+
+    // Centralized Status Labeling
+    let finalStatus = data.status;
+    if (finalStatus === 'error' || !finalStatus) {
+      const lowerErr = (data.error || '').toLowerCase();
+      if (lowerErr.includes('captcha') || lowerErr.includes('try again') || lowerErr.includes('incorrect')) {
+        finalStatus = 'captcha-error';
+      } else {
+        finalStatus = 'error';
+      }
+    }
+
+    const resultItem = { ...data, status: finalStatus, nickname };
 
     setBulkCheckState(prev => {
-      const newResults = [...prev.results, { ...data, nickname }];
+      const newResults = [...prev.results, resultItem];
+      
+      // Detailed Summary Counts
+      const allotted = newResults.filter(r => r.status === 'allotted').length;
+      const notAllotted = newResults.filter(r => r.status === 'not-allotted').length;
+      const skipped = newResults.filter(r => r.status === 'skipped').length;
+      const captchaErrors = newResults.filter(r => r.status === 'captcha-error').length;
+      const genericErrors = newResults.filter(r => r.status === 'error').length;
+
       const newSummary = {
         total: prev.summary.total,
-        allotted: newResults.filter(r => r?.status === 'allotted').length,
-        notAllotted: newResults.filter(r => r?.status === 'not-allotted').length,
-        errors: newResults.filter(r => r?.status === 'error').length,
+        allotted,
+        notAllotted,
+        skipped,
+        captchaErrors,
+        errors: genericErrors,
         totalShares: newResults.reduce((sum, r) => sum + (r?.shares || 0), 0)
       };
 
       return {
         ...prev,
         results: newResults,
-        summary: newSummary
+        summary: newSummary,
+        progress: (newResults.length / prev.summary.total) * 100,
+        currentIndex: prev.currentIndex + 1,
+        currentCheckingNickname: '',
+        currentCheckingBoid: '',
+        currentCaptchaImage: '',
+        currentCaptcha: ''
       };
     });
 
@@ -511,6 +567,10 @@ export default function BulkCheckPanel({
         return <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />;
       case 'not-allotted':
         return <Ionicons name="close-circle" size={20} color="#F44336" />;
+      case 'skipped':
+        return <Ionicons name="play-skip-forward-circle" size={20} color="#9E9E9E" />;
+      case 'captcha-error':
+        return <Ionicons name="alert-circle" size={20} color="#FF9800" />;
       case 'error':
         return <Ionicons name="alert-circle" size={20} color="#FF9800" />;
       default:
@@ -617,39 +677,72 @@ export default function BulkCheckPanel({
                     </View>
                   </View>
 
+                      {/* Summary Emotive Message */}
+                      <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                        <Text style={{ 
+                          fontSize: 24, 
+                          fontWeight: 'bold', 
+                          color: bulkCheckState.summary.allotted > 0 ? '#059669' : '#DC2626',
+                          textAlign: 'center'
+                        }}>
+                          {bulkCheckState.summary.allotted > 0 ? "Congratulations! 🎉" : "Better luck next time! 🍀"}
+                        </Text>
+                        <Text style={{ color: '#6B7280', fontSize: 13, marginTop: 4 }}>
+                          {bulkCheckState.summary.allotted > 0 
+                            ? `You got allotted in ${bulkCheckState.summary.allotted} account(s)!` 
+                            : "No allotment found in any of the accounts."}
+                        </Text>
+                      </View>
+
                       {/* All Results List - Card Styled Synchronized with Screen */}
-                      {bulkCheckState.results.map((item, idx) => (
-                        <View key={idx} style={[panelStyles.resultCard, { marginBottom: 8, elevation: 0, borderWidth: 1, borderColor: '#F3F4F6' }]}>
-                          <View style={[
-                            panelStyles.resultCardIndicator, 
-                            { backgroundColor: item.status === 'allotted' ? '#10B981' : '#EF4444' }
-                          ]} />
-                          <View style={[panelStyles.resultCardContent, { padding: 8 }]}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <View>
-                                <Text style={[panelStyles.resultCardNickname, { fontSize: 13 }]}>{item.nickname}</Text>
-                                <Text style={[panelStyles.resultCardBoid, { fontSize: 10 }]}>{maskBoid(item.boid)}</Text>
-                              </View>
-                              <View style={[
-                                panelStyles.resultBadge,
-                                { paddingHorizontal: 6, paddingVertical: 2, backgroundColor: item.status === 'allotted' ? '#ECFDF5' : '#FEF2F2' }
-                              ]}>
-                                <Ionicons 
-                                  name={item.status === 'allotted' ? "trophy" : "close-circle-outline"} 
-                                  size={10} 
-                                  color={item.status === 'allotted' ? '#059669' : '#DC2626'} 
-                                />
-                                <Text style={[
-                                  panelStyles.resultBadgeText,
-                                  { fontSize: 10, color: item.status === 'allotted' ? '#059669' : '#DC2626' }
+                      {bulkCheckState.results.map((item, idx) => {
+                        const isAllotted = item.status === 'allotted';
+                        const isSkipped = item.status === 'skipped';
+                        const isError = item.status === 'error' || item.status === 'captcha-error';
+                        
+                        let statusColor = '#EF4444'; // default red
+                        if (isAllotted) statusColor = '#10B981';
+                        if (isSkipped) statusColor = '#9E9E9E';
+                        if (item.status === 'captcha-error') statusColor = '#FF9800';
+
+                        let statusLabel = 'Not Allotted';
+                        if (isAllotted) statusLabel = `Allotted: ${item.shares} Units`;
+                        if (isSkipped) statusLabel = 'Skipped';
+                        if (item.status === 'captcha-error') statusLabel = 'Captcha Error';
+
+                        return (
+                          <View key={idx} style={[panelStyles.resultCard, { marginBottom: 8, elevation: 0, borderWidth: 1, borderColor: '#F3F4F6' }]}>
+                            <View style={[
+                              panelStyles.resultCardIndicator, 
+                              { backgroundColor: statusColor }
+                            ]} />
+                            <View style={[panelStyles.resultCardContent, { padding: 8 }]}>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View>
+                                  <Text style={[panelStyles.resultCardNickname, { fontSize: 13 }]}>{item.nickname}</Text>
+                                  <Text style={[panelStyles.resultCardBoid, { fontSize: 10 }]}>{maskBoid(item.boid)}</Text>
+                                </View>
+                                <View style={[
+                                  panelStyles.resultBadge,
+                                  { paddingHorizontal: 6, paddingVertical: 2, backgroundColor: statusColor + '10' }
                                 ]}>
-                                  {item.status === 'allotted' ? `${item.shares} Units` : 'Not Allotted'}
-                                </Text>
+                                  <Ionicons 
+                                    name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")} 
+                                    size={10} 
+                                    color={statusColor} 
+                                  />
+                                  <Text style={[
+                                    panelStyles.resultBadgeText,
+                                    { fontSize: 10, color: statusColor }
+                                  ]}>
+                                    {statusLabel}
+                                  </Text>
+                                </View>
                               </View>
                             </View>
                           </View>
-                        </View>
-                      ))}
+                        );
+                      })}
                 </View>
 
                 <View style={panelStyles.shareCardFooter}>
@@ -722,10 +815,16 @@ export default function BulkCheckPanel({
                 showsVerticalScrollIndicator={false}
               >
                 <View style={[panelStyles.resultsHeader, { alignItems: 'center' }]}>
-                   <View style={{ flex: 1 }}>
-                     <Text style={panelStyles.resultsTitle}>Allotment Results</Text>
-                     <Text style={panelStyles.resultsSubtitle}>Checking process finished</Text>
-                   </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[panelStyles.resultsTitle, { color: bulkCheckState.summary.allotted > 0 ? '#059669' : '#DC2626' }]}>
+                        {bulkCheckState.summary.allotted > 0 ? "Congratulations! 🎉" : "Sorry, Better luck next time! 🍀"}
+                      </Text>
+                      <Text style={panelStyles.resultsSubtitle}>
+                        {bulkCheckState.summary.allotted > 0 
+                          ? `You were allotted in ${bulkCheckState.summary.allotted} account(s).` 
+                          : "No allotment found in any accounts."}
+                      </Text>
+                    </View>
                    <View style={panelStyles.totalBadgeRefined}>
                       <Text style={panelStyles.totalBadgeValue}>{bulkCheckState.summary.total}</Text>
                       <Text style={panelStyles.totalBadgeLabel}>CHECKED</Text>
@@ -753,38 +852,54 @@ export default function BulkCheckPanel({
 
                 {/* Professional Result Cards */}
                 <View style={{ marginBottom: 20 }}>
-                  {bulkCheckState.results.map((item, index) => (
-                    <View key={index} style={panelStyles.resultCard}>
-                      <View style={[
-                        panelStyles.resultCardIndicator, 
-                        { backgroundColor: item.status === 'allotted' ? '#10B981' : '#EF4444' }
-                      ]} />
-                      <View style={panelStyles.resultCardContent}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <View>
-                            <Text style={panelStyles.resultCardNickname}>{item.nickname}</Text>
-                            <Text style={panelStyles.resultCardBoid}>{maskBoid(item.boid)}</Text>
-                          </View>
-                          <View style={[
-                            panelStyles.resultBadge,
-                            { backgroundColor: item.status === 'allotted' ? '#ECFDF5' : '#FEF2F2' }
-                          ]}>
-                            <Ionicons 
-                              name={item.status === 'allotted' ? "trophy" : "close-circle-outline"} 
-                              size={14} 
-                              color={item.status === 'allotted' ? '#059669' : '#DC2626'} 
-                            />
-                            <Text style={[
-                              panelStyles.resultBadgeText,
-                              { color: item.status === 'allotted' ? '#059669' : '#DC2626' }
+                  {bulkCheckState.results.map((item, index) => {
+                    const isAllotted = item.status === 'allotted';
+                    const isSkipped = item.status === 'skipped';
+                    const isCaptchaErr = item.status === 'captcha-error';
+                    
+                    let statusColor = '#EF4444'; // Red
+                    if (isAllotted) statusColor = '#10B981';
+                    if (isSkipped) statusColor = '#9E9E9E';
+                    if (isCaptchaErr) statusColor = '#FF9800';
+
+                    let statusLabel = 'Not Allotted';
+                    if (isAllotted) statusLabel = `Allotted: ${item.shares} Units`;
+                    if (isSkipped) statusLabel = 'Skipped';
+                    if (isCaptchaErr) statusLabel = 'Captcha Error';
+
+                    return (
+                      <View key={index} style={panelStyles.resultCard}>
+                        <View style={[
+                          panelStyles.resultCardIndicator, 
+                          { backgroundColor: statusColor }
+                        ]} />
+                        <View style={panelStyles.resultCardContent}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View>
+                              <Text style={panelStyles.resultCardNickname}>{item.nickname}</Text>
+                              <Text style={panelStyles.resultCardBoid}>{maskBoid(item.boid)}</Text>
+                            </View>
+                            <View style={[
+                              panelStyles.resultBadge,
+                              { backgroundColor: statusColor + '10' }
                             ]}>
-                              {item.status === 'allotted' ? `${item.shares} Units` : 'Not Allotted'}
-                            </Text>
+                              <Ionicons 
+                                name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")} 
+                                size={14} 
+                                color={statusColor} 
+                              />
+                              <Text style={[
+                                panelStyles.resultBadgeText,
+                                { color: statusColor }
+                              ]}>
+                                {statusLabel}
+                              </Text>
+                            </View>
                           </View>
                         </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </ScrollView>
 
@@ -884,6 +999,12 @@ export default function BulkCheckPanel({
                   <Text style={panelStyles.manualNickname}>
                     {manualPrompt.nickname || 'Checking...'}
                   </Text>
+
+                  {manualPrompt.error ? (
+                    <Text style={panelStyles.manualErrorText}>
+                      {manualPrompt.error}
+                    </Text>
+                  ) : null}
                   
                   {manualPrompt.imageBase64 && (
                     <View style={panelStyles.captchaDisplayContainer}>
@@ -903,7 +1024,17 @@ export default function BulkCheckPanel({
                     keyboardType="number-pad"
                     maxLength={5}
                     value={manualInput}
-                    onChangeText={setManualInput}
+                    onChangeText={(text) => {
+                      setManualInput(text);
+                      if (text.length === 5) {
+                        // Auto-submit on 5th digit!
+                        setTimeout(() => {
+                          manualPrompt.resolvePromise(text);
+                          setManualPrompt(prev => ({ ...prev, visible: false, error: '' }));
+                          setManualInput('');
+                        }, 100); 
+                      }
+                    }}
                     autoFocus
                     blurOnSubmit={false}
                     onSubmitEditing={() => {
@@ -917,28 +1048,14 @@ export default function BulkCheckPanel({
 
                   <View style={panelStyles.manualActions}>
                     <TouchableOpacity 
-                      style={panelStyles.manualCancel}
+                      style={[panelStyles.manualCancel, { width: '100%', borderRightWidth: 0 }]}
                       onPress={() => {
                         manualPrompt.resolvePromise(null);
-                        setManualPrompt(prev => ({ ...prev, visible: false }));
+                        setManualPrompt(prev => ({ ...prev, visible: false, error: '' }));
                         setManualInput('');
                       }}
                     >
-                      <Text style={panelStyles.manualCancelText}>Skip</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[panelStyles.manualSubmit, manualInput.length !== 5 && panelStyles.manualSubmitDisabled]}
-                      onPress={() => {
-                        if (manualInput.length === 5) {
-                          manualPrompt.resolvePromise(manualInput);
-                          setManualPrompt(prev => ({ ...prev, visible: false }));
-                          setManualInput('');
-                        }
-                      }}
-                      disabled={manualInput.length !== 5}
-                    >
-                      <Text style={panelStyles.manualSubmitText}>Submit Result</Text>
+                      <Text style={panelStyles.manualCancelText}>Skip This Account</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1807,6 +1924,18 @@ const panelStyles = StyleSheet.create({
     color: '#4B5563',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  manualErrorText: {
+    color: '#F44336',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    backgroundColor: '#FFEBEE',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
   },
   manualSubmitText: {
     color: 'white',
