@@ -11,6 +11,10 @@ import {
   FlatList,
   Image,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,7 +25,13 @@ import {
   reloadForFreshCaptcha, 
   fetchIPOsDirectly
 } from '../../utils/BulkCheckStrategy';
+import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getApiBaseUrl } from '../../utils/config';
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default function BulkCheckPanel({ 
   savedBoids, 
@@ -33,7 +43,9 @@ export default function BulkCheckPanel({
   onModeChange,
   onWebViewMessage, 
   autoCheckBoid, 
-  onAutoCheckComplete 
+  onAutoCheckComplete,
+  useAiModel,
+  setUseAiModel
 }) {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState('selection'); 
@@ -45,20 +57,27 @@ export default function BulkCheckPanel({
     onModeChange?.(viewMode);
   }, [viewMode, onModeChange]);
 
+  const viewShotRef = useRef(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [capturedImageUri, setCapturedImageUri] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   const [bulkCheckState, setBulkCheckState] = useState({
     progress: 0,
     currentIndex: 0,
     currentCaptcha: null, 
-    currentCaptchaImage: null, // NEW: For zoomed display
+    currentCaptchaImage: null, 
     results: [],
-    summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 }
+    summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 },
+    currentCheckingNickname: '',
+    currentCheckingBoid: ''
   });
 
-  // --- MANUAL FALLBACK STATES ---
   const [manualPrompt, setManualPrompt] = useState({
     visible: false,
     imageBase64: null,
     boid: '',
+    nickname: '',
     resolvePromise: null
   });
   const [manualInput, setManualInput] = useState('');
@@ -98,17 +117,21 @@ export default function BulkCheckPanel({
     // FIX: onPress passes an event object, so we must check if specificBoids is actually an array
     const isArray = Array.isArray(specificBoids);
     const targetBoids = isArray ? specificBoids : savedBoids;
-    if (savedBoids.length === 0) {
+    
+    if (targetBoids.length === 0) {
       alert('No BOIDs saved. Please add BOIDs first.');
       return;
     }
 
     setViewMode('checking');
+    setCapturedImageUri(null); // Clear previous image
     setBulkCheckState({
       progress: 0,
       currentIndex: 0,
       results: [],
-      summary: { total: targetBoids.length, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 }
+      summary: { total: targetBoids.length, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 },
+      currentCheckingNickname: '',
+      currentCheckingBoid: ''
     });
 
     const API_URL = getApiBaseUrl();
@@ -130,7 +153,9 @@ export default function BulkCheckPanel({
         currentIndex: i, 
         progress: Math.round((i / targetBoids.length) * 100),
         currentCaptchaImage: null,
-        currentCaptcha: null
+        currentCaptcha: null,
+        currentCheckingNickname: boidObj?.nickname || 'Unknown',
+        currentCheckingBoid: boidString
       }));
 
       let attempts = 0;
@@ -157,66 +182,61 @@ export default function BulkCheckPanel({
           // Update UI with zoomed captcha image immediately
           setBulkCheckState(prev => ({ ...prev, currentCaptchaImage: extractionMsg.imageBase64 }));
           
-          // STEP 2: Solve from RN - Send as actual file via FormData
-          console.log(`[Bulk] Step 2: Solving Captcha via CNN for ${boidString}`);
-          console.log(`[Bulk] Image size: ${extractionMsg.imageSize} bytes, type: ${extractionMsg.mimeType}`);
-          
-          // Create FormData and append image file using React Native's file object format
-          const formData = new FormData();
-          formData.append('image', {
-            uri: `data:${extractionMsg.mimeType};base64,${extractionMsg.imageBase64}`,
-            name: 'captcha.png',
-            type: extractionMsg.mimeType
-          });
+          let finalCaptcha = "";
+          let solveSuccess = false;
 
-          
-          const solveResponse = await fetch(`${API_URL}/captcha/solve`, {
-            method: 'POST',
-            body: formData,
-            headers: {
-              'Accept': 'application/json',
-              // Note: Do NOT set Content-Type header when using FormData
+          // STEP 2: Solve (AI or Manual)
+          if (useAiModel) {
+            console.log(`[Bulk] Step 2: Solving Captcha via CNN for ${boidString}`);
+            try {
+              const formData = new FormData();
+              formData.append('image', {
+                uri: `data:${extractionMsg.mimeType};base64,${extractionMsg.imageBase64}`,
+                name: 'captcha.png',
+                type: extractionMsg.mimeType
+              });
+
+              const solveResponse = await fetch(`${API_URL}/captcha/solve`, {
+                method: 'POST',
+                body: formData,
+                headers: { 'Accept': 'application/json' }
+              });
+
+              const rawResponse = await solveResponse.text();
+              const solveData = JSON.parse(rawResponse);
+              
+              if (solveData.success) {
+                console.log(`✅ [Bulk] Captcha solved via AI: ${solveData.captchaText}`);
+                finalCaptcha = solveData.captchaText;
+                setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
+                if (finalCaptcha.length === 5) solveSuccess = true;
+              }
+            } catch (err) {
+              console.warn(`⚠️ [Bulk] AI Solve failed: ${err.message}`);
             }
-          });
-
-          // PRE-FETCH DIAGNOSTICS: Catch HTML responses (Render errors)
-          const rawResponse = await solveResponse.text();
-          let solveData;
-          try {
-            solveData = JSON.parse(rawResponse);
-          } catch (e) {
-            console.error(`❌ [Bulk] JSON Parse Error for solve. Status: ${solveResponse.status}`);
-            console.error(`❌ [Bulk] Response starts with: ${rawResponse.substring(0, 100)}`);
-            throw new Error(`Server returned HTML instead of JSON (${solveResponse.status}). Please check if API URL "${API_URL}" is correct.`);
+          } else {
+            console.log(`[Bulk] AI Model disabled. Skipping to manual entry...`);
           }
-          
-          if (!solveData.success) throw new Error(`Solve failed: ` + (solveData.error || 'Check backend logs'));
-
-          // Update UI with solved captcha
-          console.log(`✅ [Bulk] Captcha solved: ${solveData.captchaText}`);
-          setBulkCheckState(prev => ({ ...prev, currentCaptcha: solveData.captchaText }));
-
-          let finalCaptcha = solveData.captchaText;
 
           // --- MANUAL FALLBACK TRIGGER ---
-          // If captcha is obviously junk or we're on final retry and still unsure
-          const looksInvalid = finalCaptcha.length !== 5;
+          // If AI is off, or AI solve failed/looks invalid
+          let needsManual = !useAiModel || !solveSuccess || finalCaptcha.length !== 5;
           
-          // If solve is invalid, retry automatically before asking user
-          if (looksInvalid && attempts < MAX_ATTEMPTS) {
-            console.log(`📡 [Bulk] AI solve looks invalid (${finalCaptcha}). Force retry ${attempts}/${MAX_ATTEMPTS}...`);
-            await sleep(1000); // Small pause for refresh
-            continue;
-          }
+          if (needsManual) {
+            // Automatic retry if AI solve just looked junk but we have attempts left
+            if (useAiModel && attempts < MAX_ATTEMPTS && !solveSuccess) {
+              console.log(`📡 [Bulk] AI solve junk. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
+              await sleep(1000);
+              continue;
+            }
 
-          if (looksInvalid || (attempts >= MAX_ATTEMPTS && !success)) {
-            console.log(`📡 [Bulk] AI Uncertainty detected. Invoking Manual Fallback...`);
-            
+            console.log(`📡 [Bulk] Triggering Manual Fallback...`);
             const manualCode = await new Promise((resolve) => {
               setManualPrompt({
                 visible: true,
                 imageBase64: extractionMsg.imageBase64,
                 boid: boidString,
+                nickname: boidObj?.nickname || 'Unknown',
                 resolvePromise: resolve
               });
             });
@@ -245,9 +265,37 @@ export default function BulkCheckPanel({
             lowerError.includes('incorrect')
           );
 
-          if (isCaptchaError && attempts < MAX_ATTEMPTS) {
-            console.log(`⚠️ [Bulk] Captcha error detected. Status: ${resultMsg.status}, Error: ${resultMsg.error}. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
-            continue; // This will loop and refresh captcha
+          if (isCaptchaError) {
+             if (attempts < MAX_ATTEMPTS) {
+                console.log(`⚠️ [Bulk] Captcha error detected. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
+                continue; 
+             } else {
+                console.log(`📡 [Bulk] 3 failures reached. Switching to Manual Fallback for current BOID...`);
+                // Trigger manual entry on 3rd failure
+                const manualCode = await new Promise((resolve) => {
+                  setManualPrompt({
+                    visible: true,
+                    imageBase64: extractionMsg.imageBase64,
+                    boid: boidString,
+                    nickname: boidObj?.nickname || 'Unknown',
+                    resolvePromise: resolve
+                  });
+                });
+                
+                if (manualCode) {
+                  console.log(`🧑‍💻 [Manual] User provided code after 3 attempts: ${manualCode}`);
+                  // We need to re-submit with the manual code
+                  // Re-inject the submission script and wait for result again
+                  const subScript = generateFinalSubmissionScript(boidString, manualCode);
+                  webViewRef.current?.injectJavaScript(subScript);
+                  const manualResult = await waitForMessage('BULK_CHECK_RESULT', boidString, 20000);
+                  handleResult(manualResult);
+                  success = true;
+                  continue;
+                } else {
+                  throw new Error('Manual entry cancelled after 3 attempts');
+                }
+             }
           }
 
           if (resultMsg.status === 'error') {
@@ -285,9 +333,30 @@ export default function BulkCheckPanel({
       }
     }
 
-    setBulkCheckState(prev => ({ ...prev, progress: 100 }));
+    setBulkCheckState(prev => ({ ...prev, progress: 100, currentCheckingBoid: '', currentCheckingNickname: '' }));
     if (onAutoCheckComplete) onAutoCheckComplete();
-    setViewMode('results');
+    
+    // AUTO-GENERATE SHARE CARD AFTER FINISHING
+    setTimeout(async () => {
+      try {
+        if (!viewShotRef.current) {
+          console.warn('[Bulk] viewShotRef not ready, retrying...');
+          await sleep(500);
+          if (!viewShotRef.current) throw new Error('ViewShot ref still null');
+        }
+        
+        const uri = await captureRef(viewShotRef, {
+          format: 'png',
+          quality: 0.9,
+        });
+        setCapturedImageUri(uri);
+        setViewMode('results');
+        setShowPreviewModal(true); // Open popup automatically
+      } catch (captureErr) {
+        console.error('Capture error:', captureErr);
+        setViewMode('results'); 
+      }
+    }, 1000);
   };
 
   // Generic message waiter
@@ -316,6 +385,67 @@ export default function BulkCheckPanel({
         }
       };
     });
+  };
+
+  const handleShareResult = async () => {
+    try {
+      if (!capturedImageUri) return;
+      setIsSharing(true);
+
+      if (!(await Sharing.isAvailableAsync())) {
+        Toast.show({
+          type: 'error',
+          text1: 'Sharing not available',
+          text2: 'Could not share the result image'
+        });
+        return;
+      }
+
+      await Sharing.shareAsync(capturedImageUri, {
+        mimeType: 'image/png',
+        dialogTitle: 'Share IPO Results',
+        UTI: 'public.png',
+      });
+    } catch (err) {
+      console.error('Share error:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Sharing Failed',
+        text2: err.message
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleSaveToLibrary = async () => {
+    try {
+      if (!capturedImageUri) return;
+      
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Denied',
+          text2: 'Gallery access is required to save results'
+        });
+        return;
+      }
+
+      await MediaLibrary.saveToLibraryAsync(capturedImageUri);
+      Toast.show({
+        type: 'success',
+        text1: 'Saved to Gallery',
+        text2: 'IPO Result image has been saved'
+      });
+    } catch (err) {
+      console.error('Save error:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Save Failed',
+        text2: err.message
+      });
+    }
   };
 
   const maskBoid = (boid) => {
@@ -371,25 +501,9 @@ export default function BulkCheckPanel({
     }
   };
 
-  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  const exportToCSV = async () => {
-    const { results } = bulkCheckState;
-    
-    let csv = 'BOID,Status,Shares,Timestamp\n';
-    results.forEach(r => {
-      csv += `${r?.boid || 'N/A'},${r?.status || 'unknown'},${r?.shares || 0},${r?.timestamp || 'N/A'}\n`;
-    });
 
-    try {
-      await Share.share({
-        message: csv,
-        title: `IPO Results`,
-      });
-    } catch (error) {
-      console.error('Error sharing CSV:', error);
-    }
-  };
+
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -416,6 +530,45 @@ export default function BulkCheckPanel({
               Please select the <Text style={panelStyles.bold}>IPO Company</Text> from the dropdown in the website above.
             </Text>
           </View>
+
+          {/* New Toggle Placement */}
+          <View style={{ 
+            backgroundColor: '#F3E5F5', 
+            marginHorizontal: 15, 
+            padding: 12, 
+            borderRadius: 12, 
+            marginBottom: 15,
+            borderWidth: 1,
+            borderColor: '#E1BEE7'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="hardware-chip-outline" size={20} color="#6A1B9A" />
+                <Text style={{ fontWeight: 'bold', color: '#4A148C', marginLeft: 8 }}>Auto Bulk Check</Text>
+              </View>
+              <TouchableOpacity 
+                disabled={true}
+                style={{ 
+                  width: 46, 
+                  height: 24, 
+                  backgroundColor: '#E0E0E0', 
+                  borderRadius: 12, 
+                  padding: 2,
+                  justifyContent: 'center',
+                  alignItems: 'flex-start',
+                  opacity: 0.6
+                }}
+              >
+                <View style={{ width: 20, height: 20, backgroundColor: 'white', borderRadius: 10, elevation: 2 }} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
+               <Ionicons name="time-outline" size={14} color="#6A1B9A" style={{ marginTop: 1 }} />
+               <Text style={{ fontSize: 11, color: '#6A1B9A', marginLeft: 4, flex: 1, fontWeight: '600' }}>
+                 Coming soon
+               </Text>
+            </View>
+          </View>
           
           <TouchableOpacity  
             style={panelStyles.bulkCheckButton}
@@ -436,6 +589,79 @@ export default function BulkCheckPanel({
         }}
       >
         <View style={[panelStyles.fsContainer, { paddingTop: insets.top }]}>
+          {/* HIDDEN BRANDED SHARE CARD FOR VIEWSHOT - MOVED OUTSIDE CONDITIONAL TO PREVENT HANGS */}
+          <View style={{ position: 'absolute', opacity: 0, left: -5000 }}>
+            <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }}>
+              <View style={panelStyles.shareCard}>
+                <LinearGradient
+                  colors={['#6200EE', '#4A148C']}
+                  style={panelStyles.shareCardHeader}
+                >
+                  <Image source={require('../../assets/icon.png')} style={panelStyles.shareLogo} />
+                  <View>
+                    <Text style={panelStyles.shareAppName}>IPO RESULT - BOID AUTOFILLER</Text>
+                    <Text style={panelStyles.shareAppTagline}>Check results with confidence</Text>
+                  </View>
+                </LinearGradient>
+
+                <View style={panelStyles.shareCardBody}>
+                  <Text style={panelStyles.shareCardTitle}>IPO Allotment Status</Text>
+                  <View style={panelStyles.summaryGridSmall}>
+                    <View style={panelStyles.shareSumItem}>
+                      <Text style={[panelStyles.shareSumCount, { color: '#10B981' }]}>{bulkCheckState.summary.allotted}</Text>
+                      <Text style={panelStyles.shareSumLabel}>Allotted</Text>
+                    </View>
+                    <View style={panelStyles.shareSumItem}>
+                      <Text style={[panelStyles.shareSumCount, { color: '#6B7280' }]}>{bulkCheckState.summary.total}</Text>
+                      <Text style={panelStyles.shareSumLabel}>Total Checked</Text>
+                    </View>
+                  </View>
+
+                      {/* All Results List - Card Styled Synchronized with Screen */}
+                      {bulkCheckState.results.map((item, idx) => (
+                        <View key={idx} style={[panelStyles.resultCard, { marginBottom: 8, elevation: 0, borderWidth: 1, borderColor: '#F3F4F6' }]}>
+                          <View style={[
+                            panelStyles.resultCardIndicator, 
+                            { backgroundColor: item.status === 'allotted' ? '#10B981' : '#EF4444' }
+                          ]} />
+                          <View style={[panelStyles.resultCardContent, { padding: 8 }]}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <View>
+                                <Text style={[panelStyles.resultCardNickname, { fontSize: 13 }]}>{item.nickname}</Text>
+                                <Text style={[panelStyles.resultCardBoid, { fontSize: 10 }]}>{maskBoid(item.boid)}</Text>
+                              </View>
+                              <View style={[
+                                panelStyles.resultBadge,
+                                { paddingHorizontal: 6, paddingVertical: 2, backgroundColor: item.status === 'allotted' ? '#ECFDF5' : '#FEF2F2' }
+                              ]}>
+                                <Ionicons 
+                                  name={item.status === 'allotted' ? "trophy" : "close-circle-outline"} 
+                                  size={10} 
+                                  color={item.status === 'allotted' ? '#059669' : '#DC2626'} 
+                                />
+                                <Text style={[
+                                  panelStyles.resultBadgeText,
+                                  { fontSize: 10, color: item.status === 'allotted' ? '#059669' : '#DC2626' }
+                                ]}>
+                                  {item.status === 'allotted' ? `${item.shares} Units` : 'Not Allotted'}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                </View>
+
+                <View style={panelStyles.shareCardFooter}>
+                  <View style={panelStyles.shareFooterInfo}>
+                    <Ionicons name="logo-google-playstore" size={12} color="#4B5563" />
+                    <Text style={panelStyles.shareFooterText}>Download our app from Google Play Store</Text>
+                  </View>
+                </View>
+              </View>
+            </ViewShot>
+          </View>
+
           {/* Header */}
           <View style={panelStyles.fsHeader}>
              <View>
@@ -461,11 +687,11 @@ export default function BulkCheckPanel({
           {viewMode === 'checking' && (
             <View style={panelStyles.fsStatusSection}>
                <Text style={panelStyles.fsStatusText}>
-                 Checking {bulkCheckState.currentIndex + 1} of {savedBoids.length}
+                 Checking {bulkCheckState.currentIndex + 1} of {bulkCheckState.summary.total}
                </Text>
-               <Text style={panelStyles.fsNickname}>
-                 {savedBoids[bulkCheckState.currentIndex]?.nickname || savedBoids[bulkCheckState.currentIndex]?.boid || '...'}
-               </Text>
+                <Text style={panelStyles.fsNickname}>
+                  {bulkCheckState.currentCheckingNickname || bulkCheckState.currentCheckingBoid || '...'}
+                </Text>
                
                {bulkCheckState.currentCaptchaImage ? (
                  <View style={panelStyles.fsCaptchaContainer}>
@@ -488,138 +714,236 @@ export default function BulkCheckPanel({
             </View>
           )}
 
-          {/* Results List */}
-          <View style={panelStyles.fsListContainer}>
-             <View style={panelStyles.summaryRow}>
-                <View style={panelStyles.summaryItem}>
-                  <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-                  <Text style={panelStyles.summaryText}>{bulkCheckState.summary.allotted} Allotted</Text>
-                </View>
-                <View style={panelStyles.summaryItem}>
-                  <Ionicons name="close-circle" size={16} color="#F44336" />
-                  <Text style={panelStyles.summaryText}>{bulkCheckState.summary.notAllotted} Not Allotted</Text>
-                </View>
-                {bulkCheckState.summary.totalShares > 0 && (
-                  <View style={panelStyles.summaryItem}>
-                    <Ionicons name="stats-chart" size={16} color="#6200EE" />
-                    <Text style={[panelStyles.summaryText, { fontWeight: 'bold', color: '#6200EE' }]}>
-                      {bulkCheckState.summary.totalShares} Shares
-                    </Text>
-                  </View>
-                )}
-             </View>
-             
-             <FlatList 
-               data={bulkCheckState.results}
-               keyExtractor={(item, index) => index.toString()}
-               renderItem={({ item }) => (
-                 <View style={panelStyles.resultItem}>
-                    {getStatusIcon(item.status)}
-                    <View style={panelStyles.resultDetails}>
-                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                         <Text style={panelStyles.resultBoid}>{maskBoid(item.boid)}</Text>
-                         <Text style={panelStyles.resultNickname}>{item.nickname}</Text>
-                       </View>
-                       <Text style={panelStyles.resultStatus}>
-                         {item.status === 'allotted' 
-                           ? `✅ ${item.message || `${item.shares} shares`}` 
-                           : item.status === 'not-allotted'
-                           ? `❌ ${item.message || 'Not allotted'}`
-                           : `⚠️ ${item.error}`}
-                       </Text>
-                    </View>
-                 </View>
-               )}
-               contentContainerStyle={{ paddingBottom: 20 }}
-             />
-          </View>
-
-          {/* Footer Actions (Export/Done) */}
+          {/* RESULTS MODE - LIST VIEW RESTORED */}
           {viewMode === 'results' && (
-             <View style={[panelStyles.fsFooter, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
-               <TouchableOpacity onPress={exportToCSV} style={panelStyles.exportButtonOutlined}>
-                  <Ionicons name="download-outline" size={18} color="#6200EE" />
-                  <Text style={{color:'#6200EE', fontWeight: '600', marginLeft: 4}}>Export CSV</Text>
-               </TouchableOpacity>
-               <TouchableOpacity 
-                 onPress={() => {
-                   setViewMode('selection');
-                   // Create a new blank state
-                   setBulkCheckState({
-                      progress: 0,
-                      currentIndex: 0,
-                      currentCaptcha: null,
-                      currentCaptchaImage: null,
-                      results: [],
-                      summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 }
-                   });
-                 }} 
-                 style={panelStyles.doneButtonFull}
-               >
-                  <Text style={{color:'white', fontWeight:'bold', fontSize: 16}}>Done</Text>
-               </TouchableOpacity>
-             </View>
-          )}
-        </View>
-
-        {/* 4. MANUAL FALLBACK OVERLAY (Inside Modal) */}
-        {manualPrompt.visible && (
-          <View style={[StyleSheet.absoluteFill, panelStyles.manualModalOverlay, { elevation: 100, zIndex: 100 }]}>
-            <View style={panelStyles.manualModalContent}>
-              <View style={panelStyles.manualHeader}>
-                <Ionicons name="eye" size={24} color="#6200EE" />
-                <Text style={panelStyles.manualTitle}>Help AI</Text>
-              </View>
-              
-              <Text style={panelStyles.manualSubtitle}>Solve for ...{manualPrompt.boid.slice(-4)}</Text>
-              
-              {manualPrompt.imageBase64 && (
-                <View style={panelStyles.captchaDisplayContainer}>
-                   <Image 
-                      source={{ uri: `data:image/png;base64,${manualPrompt.imageBase64}` }} 
-                      style={{ width: 150, height: 60, resizeMode: 'contain', marginBottom: 10 }}
-                   />
-                  <View style={panelStyles.captchaFrame}>
-                      <Text style={{fontSize: 30, letterSpacing: 4, fontWeight: 'bold'}}>{manualInput || '_____'}</Text>
-                  </View>
+            <View style={{ flex: 1 }}>
+              <ScrollView 
+                contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={[panelStyles.resultsHeader, { alignItems: 'center' }]}>
+                   <View style={{ flex: 1 }}>
+                     <Text style={panelStyles.resultsTitle}>Allotment Results</Text>
+                     <Text style={panelStyles.resultsSubtitle}>Checking process finished</Text>
+                   </View>
+                   <View style={panelStyles.totalBadgeRefined}>
+                      <Text style={panelStyles.totalBadgeValue}>{bulkCheckState.summary.total}</Text>
+                      <Text style={panelStyles.totalBadgeLabel}>CHECKED</Text>
+                   </View>
                 </View>
-              )}
 
-              <TextInput
-                style={panelStyles.manualInput}
-                placeholder="Enter 5 Digits"
-                keyboardType="number-pad"
-                maxLength={5}
-                value={manualInput}
-                onChangeText={setManualInput}
-                autoFocus
-              />
+                {/* Summary Section */}
+                <View style={panelStyles.summaryGrid}>
+                   <View style={[panelStyles.summaryCard, { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}>
+                      <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                      <View>
+                        <Text style={[panelStyles.summaryCount, { color: '#047857' }]}>{bulkCheckState.summary.allotted}</Text>
+                        <Text style={panelStyles.summaryLabel}>Allotted</Text>
+                      </View>
+                   </View>
+                   
+                   <View style={[panelStyles.summaryCard, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]}>
+                      <Ionicons name="close-circle" size={20} color="#DC2626" />
+                      <View>
+                        <Text style={[panelStyles.summaryCount, { color: '#B91C1C' }]}>{bulkCheckState.summary.notAllotted}</Text>
+                        <Text style={panelStyles.summaryLabel}>Not Allotted</Text>
+                      </View>
+                   </View>
+                </View>
 
-              <View style={panelStyles.manualActions}>
-                <TouchableOpacity 
-                  style={panelStyles.manualCancel}
-                  onPress={() => {
-                    manualPrompt.resolvePromise(null);
-                    setManualPrompt(prev => ({ ...prev, visible: false }));
-                    setManualInput('');
-                  }}
-                >
-                  <Text style={panelStyles.manualCancelText}>Skip</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[panelStyles.manualSubmit, manualInput.length !== 5 && panelStyles.manualSubmitDisabled]}
-                  disabled={manualInput.length !== 5}
-                  onPress={() => {
-                    manualPrompt.resolvePromise(manualInput);
-                    setManualPrompt(prev => ({ ...prev, visible: false }));
-                    setManualInput('');
-                  }}
-                >
-                  <Text style={panelStyles.manualSubmitText}>Submit</Text>
-                </TouchableOpacity>
+                {/* Professional Result Cards */}
+                <View style={{ marginBottom: 20 }}>
+                  {bulkCheckState.results.map((item, index) => (
+                    <View key={index} style={panelStyles.resultCard}>
+                      <View style={[
+                        panelStyles.resultCardIndicator, 
+                        { backgroundColor: item.status === 'allotted' ? '#10B981' : '#EF4444' }
+                      ]} />
+                      <View style={panelStyles.resultCardContent}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View>
+                            <Text style={panelStyles.resultCardNickname}>{item.nickname}</Text>
+                            <Text style={panelStyles.resultCardBoid}>{maskBoid(item.boid)}</Text>
+                          </View>
+                          <View style={[
+                            panelStyles.resultBadge,
+                            { backgroundColor: item.status === 'allotted' ? '#ECFDF5' : '#FEF2F2' }
+                          ]}>
+                            <Ionicons 
+                              name={item.status === 'allotted' ? "trophy" : "close-circle-outline"} 
+                              size={14} 
+                              color={item.status === 'allotted' ? '#059669' : '#DC2626'} 
+                            />
+                            <Text style={[
+                              panelStyles.resultBadgeText,
+                              { color: item.status === 'allotted' ? '#059669' : '#DC2626' }
+                            ]}>
+                              {item.status === 'allotted' ? `${item.shares} Units` : 'Not Allotted'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* REFINED ACTION BUTTONS (BOTTOM) */}
+              <View style={[panelStyles.stickyFooter, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
+                 <TouchableOpacity 
+                   style={panelStyles.btnTakeScreenshot}
+                   onPress={() => setShowPreviewModal(true)}
+                 >
+                   <Ionicons name="camera-outline" size={22} color="white" />
+                   <Text style={panelStyles.btnTakeScreenshotText}>Take Screenshot</Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity 
+                   style={panelStyles.btnFinishRefined}
+                   onPress={() => {
+                     setViewMode('selection');
+                     setShowPreviewModal(false);
+                     setBulkCheckState({
+                       progress: 0,
+                       currentIndex: 0,
+                       currentCaptcha: null,
+                       currentCaptchaImage: null,
+                       currentCheckingBoid: '',
+                       currentCheckingNickname: '',
+                       results: [],
+                       summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 }
+                     });
+                     setCapturedImageUri(null);
+                   }}
+                 >
+                   <Text style={panelStyles.btnFinishRefinedText}>Done</Text>
+                 </TouchableOpacity>
               </View>
             </View>
+          )}
+
+          {/* PREVIEW MODAL (POPUP) */}
+          <Modal
+            visible={showPreviewModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowPreviewModal(false)}
+          >
+            <View style={panelStyles.popupOverlay}>
+               <View style={panelStyles.popupContent}>
+                  <View style={panelStyles.popupHeader}>
+                     <Text style={panelStyles.popupTitle}>Branded Report</Text>
+                     <TouchableOpacity onPress={() => setShowPreviewModal(false)}>
+                        <Ionicons name="close" size={24} color="#333" />
+                     </TouchableOpacity>
+                  </View>
+
+                  {capturedImageUri ? (
+                    <View style={panelStyles.popupImageContainer}>
+                      <Image 
+                        source={{ uri: capturedImageUri }} 
+                        style={panelStyles.popupImage} 
+                        resizeMode="contain"
+                      />
+                    </View>
+                  ) : (
+                    <View style={panelStyles.popupLoading}>
+                      <ActivityIndicator color="#6200EE" size="large" />
+                      <Text style={{ marginTop: 10, color: '#666' }}>Generating report...</Text>
+                    </View>
+                  )}
+
+                  <View style={panelStyles.popupActions}>
+                     <TouchableOpacity style={panelStyles.popupBtnDownload} onPress={handleSaveToLibrary}>
+                       <Ionicons name="download-outline" size={20} color="#6200EE" />
+                       <Text style={panelStyles.popupBtnDownloadText}>Save</Text>
+                     </TouchableOpacity>
+
+                     <TouchableOpacity style={panelStyles.popupBtnShare} onPress={handleShareResult} disabled={isSharing}>
+                       <Ionicons name="logo-whatsapp" size={18} color="white" />
+                       <Text style={panelStyles.popupBtnShareText}>Share</Text>
+                     </TouchableOpacity>
+                  </View>
+               </View>
+            </View>
+          </Modal>
+        </View>
+
+        {manualPrompt.visible && (
+          <View style={[StyleSheet.absoluteFill, panelStyles.manualModalOverlay, { zIndex: 9999, paddingTop: insets.top + 20 }]}>
+             <KeyboardAvoidingView 
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ flex: 1 }}
+            >
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+                contentContainerStyle={{ padding: 20 }}
+              >
+                <View style={panelStyles.manualModalContent}>
+                  <Text style={panelStyles.manualNickname}>
+                    {manualPrompt.nickname || 'Checking...'}
+                  </Text>
+                  
+                  {manualPrompt.imageBase64 && (
+                    <View style={panelStyles.captchaDisplayContainer}>
+                       <View style={panelStyles.captchaFrame}>
+                          <Image 
+                             source={{ uri: `data:image/png;base64,${manualPrompt.imageBase64}` }} 
+                             style={{ width: 260, height: 100 }} 
+                             resizeMode="contain"
+                          />
+                       </View>
+                    </View>
+                  )}
+
+                  <TextInput
+                    style={panelStyles.manualInput}
+                    placeholder="Enter 5 Digits"
+                    keyboardType="number-pad"
+                    maxLength={5}
+                    value={manualInput}
+                    onChangeText={setManualInput}
+                    autoFocus
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => {
+                      if (manualInput.length === 5) {
+                        manualPrompt.resolvePromise(manualInput);
+                        setManualPrompt(prev => ({ ...prev, visible: false }));
+                        setManualInput('');
+                      }
+                    }}
+                  />
+
+                  <View style={panelStyles.manualActions}>
+                    <TouchableOpacity 
+                      style={panelStyles.manualCancel}
+                      onPress={() => {
+                        manualPrompt.resolvePromise(null);
+                        setManualPrompt(prev => ({ ...prev, visible: false }));
+                        setManualInput('');
+                      }}
+                    >
+                      <Text style={panelStyles.manualCancelText}>Skip</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={[panelStyles.manualSubmit, manualInput.length !== 5 && panelStyles.manualSubmitDisabled]}
+                      onPress={() => {
+                        if (manualInput.length === 5) {
+                          manualPrompt.resolvePromise(manualInput);
+                          setManualPrompt(prev => ({ ...prev, visible: false }));
+                          setManualInput('');
+                        }
+                      }}
+                      disabled={manualInput.length !== 5}
+                    >
+                      <Text style={panelStyles.manualSubmitText}>Submit Result</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
           </View>
         )}
       </Modal>
@@ -734,76 +1058,330 @@ const panelStyles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'right',
   },
-  resultsContainer: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+  // PREVIEW STYLES
+  previewContainer: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    padding: 15,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    elevation: 2,
-  },
-  resultsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  resultsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  exportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  exportText: {
-    color: '#6200EE',
+  previewTitle: {
     fontSize: 14,
+    fontWeight: '700',
+    color: '#6200EE',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  previewImage: {
+    width: '100%',
+    height: 400,
+    borderRadius: 12,
+    backgroundColor: 'white',
+  },
+  generatingCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  generatingText: {
+    marginTop: 15,
+    fontSize: 14,
+    color: '#6B7280',
     fontWeight: '600',
   },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+
+  // SHARE CARD STYLES (HIDDEN)
+  shareCard: {
+    width: 320,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  summaryItem: {
+  shareCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    gap: 12,
+  },
+  shareLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'white',
+  },
+  shareAppName: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  shareAppTagline: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  shareCardBody: {
+    padding: 20,
+  },
+  shareCardTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  summaryGridSmall: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 30,
+    marginBottom: 20,
+    paddingVertical: 15,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+  },
+  shareSumItem: {
+    alignItems: 'center',
+  },
+  shareSumCount: {
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  shareSumLabel: {
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  shareResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    paddingLeft: 10,
+  },
+  shareResultText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  shareCardFooter: {
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  shareFooterInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  summaryText: {
-    fontSize: 13,
-    fontWeight: '600',
+  shareFooterText: {
+    fontSize: 9,
+    fontWeight: '700',
     color: '#4B5563',
   },
+
+  // STICKY BOTTOM ACTIONS
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    padding: 16,
+    flexDirection: 'row',
+    gap: 10,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  btnDownload: {
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F3E8FF',
+    borderWidth: 1,
+    borderColor: '#6200EE',
+  },
+  btnShare: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#25D366',
+    borderRadius: 12,
+    gap: 8,
+  },
+  btnShareText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  btnFinish: {
+    flex: 1,
+    backgroundColor: '#6200EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  btnFinishText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  resultsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  resultsTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#111827',
+  },
+  resultsSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  batchBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  batchBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#4338CA',
+    letterSpacing: 0.5,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  summaryCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  summaryCount: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
   resultsList: {
-    maxHeight: 250,
+    maxHeight: 300,
   },
   resultItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F9FAFB',
   },
+  resultStatusDot: (allotted) => ({
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: allotted ? '#10B981' : '#EF4444',
+  }),
   resultDetails: {
     flex: 1,
   },
   resultBoid: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  nicknameBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  nicknameBadgeText: {
+    fontSize: 10,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#4B5563',
+    textTransform: 'uppercase',
   },
   resultStatus: {
     fontSize: 12,
-    color: '#6B7280',
     marginTop: 2,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  shareImageButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1.5,
+    borderColor: '#6200EE',
+    padding: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  shareImageButtonText: {
+    color: '#6200EE',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  doneButtonFull: {
+    flex: 1,
+    backgroundColor: '#6200EE',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+  },
+  doneButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   checkingIndicator: {
     flexDirection: 'row',
@@ -811,46 +1389,32 @@ const panelStyles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
     gap: 8,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    marginTop: 10,
   },
   checkingIndicatorText: {
     fontSize: 13,
     color: '#6200EE',
-    fontStyle: 'italic',
-  },
-  captchaFeedback: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginTop: 4,
-  },
-  captchaCode: {
-    fontWeight: 'bold',
-    color: '#10B981',
-    letterSpacing: 1,
-  },
-  doneButton: {
-    backgroundColor: '#6200EE',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  doneButtonText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   // Manual Modal Styles
-  manualModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: 20,
-  },
+   manualModalOverlay: {
+     flex: 1,
+     backgroundColor: 'rgba(0,0,0,0.7)', 
+     justifyContent: 'flex-start',
+   },
   manualModalContent: {
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
-    elevation: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   manualHeader: {
     flexDirection: 'row',
@@ -867,6 +1431,14 @@ const panelStyles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563',
     marginBottom: 20,
+  },
+  manualNickname: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#6200EE',
+    textAlign: 'center',
+    marginBottom: 15,
+    textTransform: 'uppercase',
   },
   captchaDisplayContainer: {
     marginBottom: 20,
@@ -1046,5 +1618,226 @@ const panelStyles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     overflow: 'hidden',
+  },
+  // Phase 10 Popup Styles
+  popupOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  popupContent: {
+    width: '100%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    overflow: 'hidden',
+    padding: 20,
+  },
+  popupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  popupTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  popupImageContainer: {
+    width: '100%',
+    height: 400,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  popupImage: {
+    width: '100%',
+    height: '100%',
+  },
+  popupLoading: {
+    height: 400,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popupActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  popupBtnDownload: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3E8FF',
+    padding: 15,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#6200EE',
+  },
+  popupBtnDownloadText: {
+    color: '#6200EE',
+    fontWeight: 'bold',
+  },
+  popupBtnShare: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#25D366',
+    padding: 15,
+    borderRadius: 12,
+    gap: 8,
+  },
+  popupBtnShareText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  btnShareReport: {
+    flex: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6200EE',
+    borderRadius: 12,
+    gap: 8,
+  },
+  btnShareReportText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  btnFinishSmall: {
+    flex: 1,
+    backgroundColor: '#F3E8FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#6200EE',
+  },
+  btnFinishSmallText: {
+    color: '#6200EE',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  // Phase 11 Refined Cards
+  resultCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  resultCardIndicator: {
+    width: 6,
+    height: '100%',
+  },
+  resultCardContent: {
+    flex: 1,
+    padding: 12,
+    paddingLeft: 10,
+  },
+  resultCardNickname: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  resultCardBoid: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  resultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 4,
+  },
+  resultBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  btnTakeScreenshot: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6200EE',
+    borderRadius: 14,
+    gap: 8,
+    height: 56, // Increased height
+    elevation: 4,
+    shadowColor: '#6200EE',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  btnTakeScreenshotText: {
+    color: 'white',
+    fontSize: 16, // Professional size
+    fontWeight: '900',
+  },
+  btnFinishRefined: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    height: 56, // Increased height
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  btnFinishRefinedText: {
+    color: '#4B5563',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  manualSubmitText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  manualSubmitDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#D1D5DB',
+  },
+  totalBadgeRefined: {
+    backgroundColor: '#6200EE',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#6200EE',
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+  },
+  totalBadgeValue: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  totalBadgeLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 8,
+    fontWeight: '700',
+    marginTop: -2,
   },
 });

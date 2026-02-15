@@ -66,7 +66,7 @@ export default function BoidModal({
   });
 
   const [panelMode, setPanelMode] = React.useState('selection');
-  const [isMinimized, setIsMinimized] = React.useState(false); 
+  const [useAiModel, setUseAiModel] = React.useState(false);
   const [autoCheckBoid, setAutoCheckBoid] = React.useState(null);
 
   const renderItem = ({ item, index }) => {
@@ -79,7 +79,7 @@ export default function BoidModal({
         index={index}
         result={match?.result}
         fillBoid={checkBoidResult}
-        autoCheck={(boid) => setAutoCheckBoid(boid)} // Single Auto Check
+        autoCheck={(item) => setAutoCheckBoid(item)} // Single Auto Check
         deleteBoid={deleteBoid}
         startEdit={startEdit}
       />
@@ -98,33 +98,7 @@ export default function BoidModal({
 
   const isChecking = panelMode === 'checking';
 
-  // Minimize view: Only a small floating button at the bottom
-  if (isMinimized && visible) {
-    return (
-      <Modal visible={visible} animationType="none" transparent>
-        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' }} pointerEvents="box-none">
-          <TouchableOpacity 
-            style={{ 
-              backgroundColor: '#6200EE', 
-              paddingHorizontal: 20,
-              paddingVertical: 12,
-              margin: 20, 
-              borderRadius: 30, 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              elevation: 8,
-              alignSelf: 'center'
-            }}
-            onPress={() => setIsMinimized(false)}
-          >
-            <Ionicons name="expand" size={20} color="white" />
-            <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 8 }}>Resume Bulk Check</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-    );
-  }
+
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -141,22 +115,34 @@ export default function BoidModal({
           style={styles.modalContent}
           onPress={() => {}}
         >
-          {/* Top Bar with Minimize Toggle */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          {/* Modal Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15, paddingHorizontal: 5 }}>
             <View style={{ flex: 1 }}>
-              <BoidModalTopBar
-                showForm={showForm}
-                setShowForm={setShowForm}
-                setResults={setResults}
-              />
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#6200EE' }}>BOID Manager</Text>
+              <Text style={{ fontSize: 12, color: '#666' }}>Manage and check your IPO results</Text>
             </View>
             <TouchableOpacity 
-              onPress={() => setIsMinimized(true)}
-              style={{ padding: 8, marginLeft: 10 }}
+              onPress={() => {
+                setVisible(false);
+                resetForm();
+              }}
+              style={{ 
+                padding: 10, 
+                backgroundColor: '#FFEBEE', 
+                borderRadius: 20 
+              }}
             >
-              <Ionicons name="contract" size={24} color="#6200EE" />
+              <Ionicons name="close" size={24} color="#F44336" />
             </TouchableOpacity>
           </View>
+
+
+
+          <BoidModalTopBar
+            showForm={showForm}
+            setShowForm={setShowForm}
+            setResults={setResults}
+          />
 
           <ScrollView 
             showsVerticalScrollIndicator={false}
@@ -179,6 +165,8 @@ export default function BoidModal({
               onWebViewMessage={onWebViewMessage}
               autoCheckBoid={autoCheckBoid}
               onAutoCheckComplete={() => setAutoCheckBoid(null)}
+              useAiModel={useAiModel}
+              setUseAiModel={setUseAiModel}
             />
             
             {/* 

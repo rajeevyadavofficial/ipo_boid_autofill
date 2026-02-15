@@ -17,18 +17,7 @@ export default function BoidListItem({
   const [isVisible, setIsVisible] = useState(false);
   const isAllotted = typeof result === 'string' && result.toLowerCase().includes('congrat');
 
-  const handleShare = async () => {
-    if (typeof result !== 'string') return;
-    try {
-      const message = `📊 IPO Result for ${item.nickname || item.boid}\n\n${result}\n\nCheck yours with IPO Autofill App! 🚀`;
-      await Share.share({
-        message,
-        title: 'IPO Result Share',
-      });
-    } catch (error) {
-      console.error('Sharing failed:', error);
-    }
-  };
+
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(item.boid);
@@ -94,12 +83,8 @@ export default function BoidListItem({
 
       {/* Actions */}
       <View style={styles.boidActions}>
-        {result ? (
-          <TouchableOpacity onPress={handleShare} style={{ marginRight: 12 }}>
-            <Ionicons name="share-social-outline" size={20} color="#6200EE" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity onPress={() => autoCheck(item.boid)} style={{ marginRight: 12 }}>
+        {!result && (
+          <TouchableOpacity onPress={() => autoCheck(item)} style={{ marginRight: 12 }}>
              <Ionicons name="hardware-chip-outline" size={20} color="#6200EE" />
           </TouchableOpacity>
         )}

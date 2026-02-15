@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
 import { getApiBaseUrl } from '../../utils/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateDOMInspectionScript } from '../../utils/diagnosticScripts';
+
 
 // Import your profile picture
 import ProfilePic from '../../assets/profile.jpg';
@@ -491,21 +491,7 @@ export default function DeveloperSidebar({
     webViewRef.current?.injectJavaScript(scanScript);
   };
 
-  const inspectTextElements = () => {
-    const conditionNames = {
-      'NOT_ALLOTTED': 'Not Allotted Message',
-      'ALLOTTED': 'Allotted Message',
-      'INVALID_CAPTCHA': 'Invalid Captcha Error'
-    };
-    
-    const inspectionScript = generateDOMInspectionScript();
-    webViewRef.current?.injectJavaScript(inspectionScript);
-    
-    Alert.alert(
-      '🔍 DOM Inspection Started', 
-      `Scanning for: ${conditionNames[selectedCondition]}\n\nMake sure the message is visible on screen!\n\nResults will be saved automatically.`
-    );
-  };
+
 
   useEffect(() => {
     if (visible && isHarvesting) {
@@ -636,39 +622,7 @@ export default function DeveloperSidebar({
                   <Text style={styles.syncButtonText}>SCAN REFRESH BUTTON</Text>
                 </TouchableOpacity>
 
-               {/* DOM Inspection Section */}
-               <View style={{ marginTop: 20, marginBottom: 10 }}>
-                 <Text style={styles.sectionHeader}>🔍 DOM Inspection</Text>
-                 <Text style={styles.inputLabel}>SELECT CONDITION TO SCAN</Text>
-                 <View style={styles.toggleWrapper}>
-                   <TouchableOpacity 
-                     style={[styles.toggleOption, selectedCondition === 'NOT_ALLOTTED' && styles.toggleActive]}
-                     onPress={() => setSelectedCondition('NOT_ALLOTTED')}
-                   >
-                     <Text style={[styles.toggleText, selectedCondition === 'NOT_ALLOTTED' && styles.toggleTextActive]}>❌ Not Allotted</Text>
-                   </TouchableOpacity>
-                   <TouchableOpacity 
-                     style={[styles.toggleOption, selectedCondition === 'ALLOTTED' && styles.toggleActive]}
-                     onPress={() => setSelectedCondition('ALLOTTED')}
-                   >
-                     <Text style={[styles.toggleText, selectedCondition === 'ALLOTTED' && styles.toggleTextActive]}>🎉 Allotted</Text>
-                   </TouchableOpacity>
-                   <TouchableOpacity 
-                     style={[styles.toggleOption, selectedCondition === 'INVALID_CAPTCHA' && styles.toggleActive]}
-                     onPress={() => setSelectedCondition('INVALID_CAPTCHA')}
-                   >
-                     <Text style={[styles.toggleText, selectedCondition === 'INVALID_CAPTCHA' && styles.toggleTextActive]}>⚠️ Invalid</Text>
-                   </TouchableOpacity>
-                 </View>
-               </View>
 
-               <TouchableOpacity 
-                  style={[styles.syncButton, { backgroundColor: '#FF5722', marginTop: 10 }]} 
-                  onPress={inspectTextElements}
-                >
-                  <Ionicons name="search-outline" size={20} color="white" />
-                  <Text style={styles.syncButtonText}>SCAN CURRENT CONDITION</Text>
-                </TouchableOpacity>
 
                <View style={styles.overrideBox}>
                   <Text style={styles.inputLabel}>BACKEND URL</Text>
