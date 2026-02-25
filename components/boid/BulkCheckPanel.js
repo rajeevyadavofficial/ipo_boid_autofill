@@ -189,7 +189,7 @@ export default function BulkCheckPanel({
 
           // STEP 2: Solve (AI or Manual)
           if (useAiModel) {
-            console.log(`[Bulk] Step 2: Solving Captcha via CNN for ${boidString}`);
+            console.log(`[Bulk] Step 2: Solving Captcha via TrOCR Engine for ${boidString}`);
             try {
               const formData = new FormData();
               formData.append('image', {
@@ -592,43 +592,51 @@ export default function BulkCheckPanel({
           </View>
 
           {/* New Toggle Placement */}
-          <View style={{ 
-            backgroundColor: '#F3E5F5', 
-            marginHorizontal: 15, 
-            padding: 12, 
-            borderRadius: 12, 
-            marginBottom: 15,
-            borderWidth: 1,
-            borderColor: '#E1BEE7'
-          }}>
+          <TouchableOpacity 
+            onPress={() => setUseAiModel(!useAiModel)}
+            style={{ 
+              backgroundColor: useAiModel ? '#F3E5F5' : '#F5F5F5', 
+              marginHorizontal: 15, 
+              padding: 12, 
+              borderRadius: 12, 
+              marginBottom: 15,
+              borderWidth: 1,
+              borderColor: useAiModel ? '#E1BEE7' : '#E0E0E0'
+            }}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="hardware-chip-outline" size={20} color="#6A1B9A" />
-                <Text style={{ fontWeight: 'bold', color: '#4A148C', marginLeft: 8 }}>Auto Bulk Check</Text>
+                <Ionicons name="hardware-chip-outline" size={20} color={useAiModel ? "#6A1B9A" : "#757575"} />
+                <Text style={{ fontWeight: 'bold', color: useAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
+                  High-Precision Solver
+                </Text>
               </View>
-              <TouchableOpacity 
-                disabled={true}
+              <View 
                 style={{ 
                   width: 46, 
                   height: 24, 
-                  backgroundColor: '#E0E0E0', 
+                  backgroundColor: useAiModel ? '#6A1B9A' : '#BDBDBD', 
                   borderRadius: 12, 
                   padding: 2,
                   justifyContent: 'center',
-                  alignItems: 'flex-start',
-                  opacity: 0.6
+                  alignItems: useAiModel ? 'flex-end' : 'flex-start'
                 }}
               >
                 <View style={{ width: 20, height: 20, backgroundColor: 'white', borderRadius: 10, elevation: 2 }} />
-              </TouchableOpacity>
+              </View>
             </View>
             <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
-               <Ionicons name="time-outline" size={14} color="#6A1B9A" style={{ marginTop: 1 }} />
-               <Text style={{ fontSize: 11, color: '#6A1B9A', marginLeft: 4, flex: 1, fontWeight: '600' }}>
-                 Coming soon
+               <Ionicons 
+                 name={useAiModel ? "checkmark-circle" : "information-circle-outline"} 
+                 size={14} 
+                 color={useAiModel ? "#6A1B9A" : "#757575"} 
+                 style={{ marginTop: 1 }} 
+               />
+               <Text style={{ fontSize: 11, color: useAiModel ? '#6A1B9A' : '#757575', marginLeft: 4, flex: 1, fontWeight: '600' }}>
+                 {useAiModel ? "TrOCR Engine Enabled (94.24% Accuracy)" : "Use high-precision AI to skip manual captcha"}
                </Text>
             </View>
-          </View>
+          </TouchableOpacity>
           
           <TouchableOpacity  
             style={panelStyles.bulkCheckButton}

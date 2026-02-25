@@ -66,7 +66,7 @@ export default function BoidModal({
   });
 
   const [panelMode, setPanelMode] = React.useState('selection');
-  const [useAiModel, setUseAiModel] = React.useState(false);
+  const [useAiModel, setUseAiModel] = React.useState(true);
   const [autoCheckBoid, setAutoCheckBoid] = React.useState(null);
 
   const renderItem = ({ item, index }) => {
