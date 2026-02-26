@@ -244,7 +244,7 @@ export default function BulkCheckPanel({
           let solveSuccess = false;
 
           // STEP 2: Solve (AI or Manual)
-          if (useAiModel) {
+          if (activeAiModel) {
             console.log(`[Bulk] Step 2: Solving Captcha via TrOCR Engine for ${boidString}`);
             try {
               const formData = new FormData();
@@ -278,11 +278,11 @@ export default function BulkCheckPanel({
 
           // --- MANUAL FALLBACK TRIGGER ---
           // If AI is off, or AI solve failed/looks invalid
-          let needsManual = !useAiModel || !solveSuccess || finalCaptcha.length !== 5;
+          let needsManual = !activeAiModel || !solveSuccess || finalCaptcha.length !== 5;
           
           if (needsManual) {
             // Automatic retry if AI solve just looked junk but we have attempts left
-            if (useAiModel && attempts < MAX_ATTEMPTS && !solveSuccess) {
+            if (activeAiModel && attempts < MAX_ATTEMPTS && !solveSuccess) {
               console.log(`📡 [Bulk] AI solve junk. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
               await sleep(1000);
               continue;
@@ -657,7 +657,7 @@ export default function BulkCheckPanel({
           paddingTop: insets.top + 8,
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="robot-outline" size={22} color="#FFD700" />
+            <Ionicons name="hardware-chip" size={22} color="#FFD700" />
             <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 }}>Bulk Check</Text>
           </View>
           <TouchableOpacity
@@ -723,9 +723,14 @@ export default function BulkCheckPanel({
             contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 10, marginLeft: 5 }}>
-              Accounts ({savedBoids.length})
-            </Text>
+            <View style={{ marginBottom: 10, marginLeft: 5 }}>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333' }}>
+                Accounts ({savedBoids.length})
+              </Text>
+              <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
+                Check to include or uncheck to skip an account.
+              </Text>
+            </View>
             {savedBoids.map((item, index) => {
               const isEnabled = enabledBoids.get(item.boid);
               return (
@@ -741,7 +746,7 @@ export default function BulkCheckPanel({
                       style={[localStyles.iconBtn, { backgroundColor: '#E1BEE7' }]}
                     >
                       <Ionicons name="hardware-chip" size={18} color="#6A1B9A" />
-                      <Text style={{ fontSize: 10, color: '#6A1B9A', fontWeight: 'bold' }}>AI</Text>
+                      <Text style={{ fontSize: 10, color: '#6A1B9A', fontWeight: 'bold', marginLeft: 4 }}>AI</Text>
                     </TouchableOpacity>
 
                     {/* Toggle */}
@@ -762,7 +767,7 @@ export default function BulkCheckPanel({
           </ScrollView>
 
           {/* Start Button */}
-          <View style={{ padding: 15, paddingBottom: 25, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
+          <View style={{ padding: 15, paddingBottom: 40, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
             <TouchableOpacity  
               style={panelStyles.bulkCheckButton}
               onPress={() => handleBulkCheck()}

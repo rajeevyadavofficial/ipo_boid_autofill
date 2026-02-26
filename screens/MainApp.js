@@ -157,6 +157,9 @@ export default function MainApp() {
         setEditIndex={setEditIndex}
         saveBoidsToStorage={saveBoidsToStorage}
         resetForm={resetForm}
+        webViewRef={webViewRef}
+        setResults={setResults}
+        setCurrentCheckingBoid={setCurrentCheckingBoid}
       />
 
       {/* Bulk Check Full-Screen Modal */}

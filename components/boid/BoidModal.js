@@ -32,6 +32,9 @@ export default function BoidModal({
   setEditIndex,
   saveBoidsToStorage,
   resetForm,
+  webViewRef,
+  setResults,
+  setCurrentCheckingBoid,
 }) {
   const {
     showForm,
@@ -52,7 +55,10 @@ export default function BoidModal({
     setEditIndex,
     saveBoidsToStorage,
     resetForm,
+    webViewRef,
     setVisible,
+    setResults,
+    setCurrentCheckingBoid,
   });
 
   // --- Clear All with PIN ---
