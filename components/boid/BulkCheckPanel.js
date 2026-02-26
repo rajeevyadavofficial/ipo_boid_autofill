@@ -74,6 +74,29 @@ export default function BulkCheckPanel({
     currentCheckingBoid: ''
   });
 
+  const [enabledBoids, setEnabledBoids] = useState(
+    new Map(savedBoids.map(b => [b.boid, true]))
+  );
+
+  // Sync enabledBoids when savedBoids change
+  useEffect(() => {
+    setEnabledBoids(prev => {
+      const next = new Map(prev);
+      savedBoids.forEach(b => {
+        if (!next.has(b.boid)) next.set(b.boid, true);
+      });
+      return next;
+    });
+  }, [savedBoids]);
+
+  const toggleBoid = (boid) => {
+    setEnabledBoids(prev => {
+      const next = new Map(prev);
+      next.set(boid, !next.get(boid));
+      return next;
+    });
+  };
+
   const [manualPrompt, setManualPrompt] = useState({
     visible: false,
     imageBase64: null,
@@ -127,11 +150,30 @@ export default function BulkCheckPanel({
 
     setViewMode('checking');
     setCapturedImageUri(null); // Clear previous image
+
+    // Filter by enabled boids unless specificBoids is provided
+    const finalTargetBoids = isArray 
+      ? specificBoids 
+      : targetBoids.filter(b => enabledBoids.get(b.boid));
+
+    if (finalTargetBoids.length === 0) {
+      alert('No accounts selected. Please enable at least one account.');
+      setViewMode('selection');
+      return;
+    }
+
+    // Initialize results with 'pending' status for the live view
+    const initialResults = finalTargetBoids.map(b => ({
+      boid: b.boid,
+      nickname: b.nickname || 'Unknown',
+      status: 'pending'
+    }));
+
     setBulkCheckState({
       progress: 0,
       currentIndex: 0,
-      results: [],
-      summary: { total: targetBoids.length, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 },
+      results: initialResults,
+      summary: { total: finalTargetBoids.length, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 },
       currentCheckingNickname: '',
       currentCheckingBoid: ''
     });
@@ -143,11 +185,11 @@ export default function BulkCheckPanel({
       console.log(`[Bulk] Step 0: Auto-selecting company "${ipoName}"`);
       const selectionScript = generateCompanySelectionScript(ipoName);
       webViewRef.current?.injectJavaScript(selectionScript);
-      await sleep(2000); // Wait for dropdown animation and selection to settle
+      await sleep(2000); 
     }
 
-    for (let i = 0; i < targetBoids.length; i++) {
-      const boidObj = targetBoids[i];
+    for (let i = 0; i < finalTargetBoids.length; i++) {
+      const boidObj = finalTargetBoids[i];
       const boidString = typeof boidObj === 'string' ? boidObj : boidObj.boid;
       // Clear previous captcha image when starting new BOID
       setBulkCheckState(prev => ({ 
@@ -498,7 +540,15 @@ export default function BulkCheckPanel({
     const resultItem = { ...data, status: finalStatus, nickname };
 
     setBulkCheckState(prev => {
-      const newResults = [...prev.results, resultItem];
+      // Find and update existing pending result if possible
+      const index = prev.results.findIndex(r => r.boid === data.boid);
+      let newResults;
+      if (index !== -1) {
+        newResults = [...prev.results];
+        newResults[index] = { ...newResults[index], ...resultItem };
+      } else {
+        newResults = [...prev.results, resultItem];
+      }
       
       // Detailed Summary Counts
       const allotted = newResults.filter(r => r.status === 'allotted').length;
@@ -521,7 +571,7 @@ export default function BulkCheckPanel({
         ...prev,
         results: newResults,
         summary: newSummary,
-        progress: (newResults.length / prev.summary.total) * 100,
+        progress: (newResults.filter(r => r.status !== 'pending').length / prev.summary.total) * 100,
         currentIndex: prev.currentIndex + 1,
         currentCheckingNickname: '',
         currentCheckingBoid: '',
@@ -605,70 +655,110 @@ export default function BulkCheckPanel({
         </View>
       )}
 
-      {/* 1. SELECTION MODE: User selects company in WebView */}
+      {/* 1. SELECTION MODE: User selects company and accounts */}
       {viewMode === 'selection' && (
-        <View style={panelStyles.selectionView}>
-          <View style={panelStyles.instructionContainer}>
-            <Ionicons name="information-circle-outline" size={20} color="#6200EE" />
-            <Text style={panelStyles.instructionText}>
-              Please select the <Text style={panelStyles.bold}>IPO Company</Text> from the dropdown in the website above.
-            </Text>
+        <View style={{ flex: 1 }}>
+          <View style={panelStyles.selectionView}>
+            <View style={panelStyles.instructionContainer}>
+              <Ionicons name="information-circle-outline" size={20} color="#6200EE" />
+              <Text style={panelStyles.instructionText}>
+                Select <Text style={panelStyles.bold}>IPO Company</Text> in the website above, then choose accounts to check.
+              </Text>
+            </View>
+
+            {/* AI Toggle */}
+            <TouchableOpacity 
+              onPress={() => setUseAiModel(!useAiModel)}
+              style={{ 
+                backgroundColor: useAiModel ? '#F3E5F5' : '#F5F5F5', 
+                marginHorizontal: 15, 
+                padding: 12, 
+                borderRadius: 12, 
+                marginBottom: 10,
+                borderWidth: 1,
+                borderColor: useAiModel ? '#E1BEE7' : '#E0E0E0'
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="hardware-chip-outline" size={20} color={useAiModel ? "#6A1B9A" : "#757575"} />
+                  <Text style={{ fontWeight: 'bold', color: useAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
+                    High-Precision Solver
+                  </Text>
+                </View>
+                <View 
+                  style={{ 
+                    width: 46, 
+                    height: 24, 
+                    backgroundColor: useAiModel ? '#6A1B9A' : '#BDBDBD', 
+                    borderRadius: 12, 
+                    padding: 2,
+                    justifyContent: 'center',
+                    alignItems: useAiModel ? 'flex-end' : 'flex-start'
+                  }}
+                >
+                  <View style={{ width: 20, height: 20, backgroundColor: 'white', borderRadius: 10, elevation: 2 }} />
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
 
-          {/* New Toggle Placement */}
-          <TouchableOpacity 
-            onPress={() => setUseAiModel(!useAiModel)}
-            style={{ 
-              backgroundColor: useAiModel ? '#F3E5F5' : '#F5F5F5', 
-              marginHorizontal: 15, 
-              padding: 12, 
-              borderRadius: 12, 
-              marginBottom: 15,
-              borderWidth: 1,
-              borderColor: useAiModel ? '#E1BEE7' : '#E0E0E0'
-            }}
+          {/* Account Selection List */}
+          <ScrollView 
+            style={{ flex: 1 }} 
+            contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
+            showsVerticalScrollIndicator={false}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="hardware-chip-outline" size={20} color={useAiModel ? "#6A1B9A" : "#757575"} />
-                <Text style={{ fontWeight: 'bold', color: useAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
-                  High-Precision Solver
-                </Text>
-              </View>
-              <View 
-                style={{ 
-                  width: 46, 
-                  height: 24, 
-                  backgroundColor: useAiModel ? '#6A1B9A' : '#BDBDBD', 
-                  borderRadius: 12, 
-                  padding: 2,
-                  justifyContent: 'center',
-                  alignItems: useAiModel ? 'flex-end' : 'flex-start'
-                }}
-              >
-                <View style={{ width: 20, height: 20, backgroundColor: 'white', borderRadius: 10, elevation: 2 }} />
-              </View>
-            </View>
-            <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
-               <Ionicons 
-                 name={useAiModel ? "checkmark-circle" : "information-circle-outline"} 
-                 size={14} 
-                 color={useAiModel ? "#6A1B9A" : "#757575"} 
-                 style={{ marginTop: 1 }} 
-               />
-               <Text style={{ fontSize: 11, color: useAiModel ? '#6A1B9A' : '#757575', marginLeft: 4, flex: 1, fontWeight: '600' }}>
-                 {useAiModel ? "TrOCR Engine Enabled (94.24% Accuracy)" : "Use high-precision AI to skip manual captcha"}
-               </Text>
-            </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity  
-            style={panelStyles.bulkCheckButton}
-            onPress={handleBulkCheck}
-          >
-            <Ionicons name="play" size={20} color="white" />
-            <Text style={panelStyles.bulkCheckText}>Start Bulk Check</Text>
-          </TouchableOpacity>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 10, marginLeft: 5 }}>
+              Accounts ({savedBoids.length})
+            </Text>
+            {savedBoids.map((item, index) => {
+              const isEnabled = enabledBoids.get(item.boid);
+              return (
+                <View key={index} style={[localStyles.accountCard, !isEnabled && { opacity: 0.6 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={localStyles.accountNickname}>{item.nickname || 'Unknown'}</Text>
+                    <Text style={localStyles.accountBoid}>{maskBoid(item.boid)}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    {/* Individual AI Check */}
+                    <TouchableOpacity 
+                      onPress={() => handleBulkCheck([item])}
+                      style={[localStyles.iconBtn, { backgroundColor: '#E1BEE7' }]}
+                    >
+                      <Ionicons name="hardware-chip" size={18} color="#6A1B9A" />
+                      <Text style={{ fontSize: 10, color: '#6A1B9A', fontWeight: 'bold' }}>AI</Text>
+                    </TouchableOpacity>
+
+                    {/* Toggle */}
+                    <TouchableOpacity 
+                      onPress={() => toggleBoid(item.boid)}
+                      style={[localStyles.iconBtn, { backgroundColor: isEnabled ? '#E8F5E9' : '#FFEBEE' }]}
+                    >
+                      <Ionicons 
+                        name={isEnabled ? "checkbox" : "square-outline"} 
+                        size={20} 
+                        color={isEnabled ? "#2E7D32" : "#C62828"} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* Start Button */}
+          <View style={{ padding: 15, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
+            <TouchableOpacity  
+              style={panelStyles.bulkCheckButton}
+              onPress={() => handleBulkCheck()}
+            >
+              <Ionicons name="play" size={20} color="white" />
+              <Text style={panelStyles.bulkCheckText}>
+                Start Bulk Check ({Array.from(enabledBoids.values()).filter(v => v).length})
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -810,17 +900,31 @@ export default function BulkCheckPanel({
 
           {/* Current Status / Captcha */}
           {viewMode === 'checking' && (
-            <View style={panelStyles.fsStatusSection}>
-               <Text style={panelStyles.fsStatusText}>
-                 Checking {bulkCheckState.currentIndex + 1} of {bulkCheckState.summary.total}
-               </Text>
-                <Text style={panelStyles.fsNickname}>
-                  {bulkCheckState.currentCheckingNickname || bulkCheckState.currentCheckingBoid || '...'}
-                </Text>
-               
-               {bulkCheckState.currentCaptchaImage ? (
-                 <View style={panelStyles.fsCaptchaContainer}>
-                    <Text style={panelStyles.fsCaptchaLabel}>Solving Captcha:</Text>
+            <View style={{ flex: 1 }}>
+              <View style={panelStyles.fsStatusSection}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 15 }}>
+                  <View>
+                    <Text style={panelStyles.fsStatusText}>
+                      Checking {bulkCheckState.currentIndex + 1} of {bulkCheckState.summary.total}
+                    </Text>
+                    <Text style={panelStyles.fsNickname}>
+                      {bulkCheckState.currentCheckingNickname || bulkCheckState.currentCheckingBoid || 'Preparing...'}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                     <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#6200EE' }}>
+                       {Math.round(bulkCheckState.progress)}%
+                     </Text>
+                     <Text style={{ fontSize: 10, color: '#999' }}>COMPLETED</Text>
+                  </View>
+                </View>
+                
+                {bulkCheckState.currentCaptchaImage ? (
+                  <View style={panelStyles.fsCaptchaContainer}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                       <ActivityIndicator size="small" color="#6200EE" />
+                       <Text style={panelStyles.fsCaptchaLabel}>Solving Captcha...</Text>
+                    </View>
                     <Image 
                       source={{ uri: `data:image/png;base64,${bulkCheckState.currentCaptchaImage}` }} 
                       style={panelStyles.fsCaptchaImage}
@@ -829,13 +933,67 @@ export default function BulkCheckPanel({
                     {bulkCheckState.currentCaptcha && (
                       <Text style={panelStyles.fsCaptchaSolved}>Input: {bulkCheckState.currentCaptcha}</Text>
                     )}
-                 </View>
-               ) : (
-                 <View style={{alignItems: 'center', marginVertical: 20}}>
-                    <ActivityIndicator size="large" color="#6200EE" />
-                    <Text style={{color: '#666', marginTop: 10}}>Extracting Captcha...</Text>
-                 </View>
-               )}
+                  </View>
+                ) : (
+                  <View style={{alignItems: 'center', marginVertical: 20, backgroundColor: '#f8f8f8', padding: 20, borderRadius: 12, width: '100%'}}>
+                     <ActivityIndicator size="large" color="#6200EE" />
+                     <Text style={{color: '#666', marginTop: 10, fontWeight: '600'}}>Extremely Fast Extraction...</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* LIVE RESULTS LIST */}
+              <View style={{ flex: 1, borderTopWidth: 1, borderTopColor: '#eee' }}>
+                <FlatList
+                  data={bulkCheckState.results}
+                  keyExtractor={(_, idx) => idx.toString()}
+                  contentContainerStyle={{ padding: 15 }}
+                  renderItem={({ item }) => {
+                    const isPending = item.status === 'pending';
+                    const isAllotted = item.status === 'allotted';
+                    const isSkipped = item.status === 'skipped';
+                    const isCaptchaErr = item.status === 'captcha-error';
+                    
+                    let statusColor = isPending ? '#999' : '#EF4444';
+                    if (isAllotted) statusColor = '#10B981';
+                    if (isSkipped) statusColor = '#9E9E9E';
+                    if (isCaptchaErr) statusColor = '#FF9800';
+
+                    let statusLabel = isPending ? 'Pending...' : 'Not Allotted';
+                    if (isAllotted) statusLabel = `Allotted: ${item.shares} Units`;
+                    if (isSkipped) statusLabel = 'Skipped';
+                    if (isCaptchaErr) statusLabel = 'Captcha Error';
+
+                    return (
+                      <View style={[panelStyles.resultCard, { opacity: isPending ? 0.7 : 1, marginBottom: 10 }]}>
+                        <View style={[panelStyles.resultCardIndicator, { backgroundColor: statusColor }]} />
+                        <View style={panelStyles.resultCardContent}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View>
+                              <Text style={panelStyles.resultCardNickname}>{item.nickname}</Text>
+                              <Text style={panelStyles.resultCardBoid}>{maskBoid(item.boid)}</Text>
+                            </View>
+                            <View style={[panelStyles.resultBadge, { backgroundColor: statusColor + '15' }]}>
+                              {isPending ? (
+                                <ActivityIndicator size={10} color={statusColor} style={{ marginRight: 4 }} />
+                              ) : (
+                                <Ionicons 
+                                  name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")} 
+                                  size={12} 
+                                  color={statusColor} 
+                                />
+                              )}
+                              <Text style={[panelStyles.resultBadgeText, { color: statusColor }]}>
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  }}
+                />
+              </View>
             </View>
           )}
 
@@ -2000,5 +2158,41 @@ const panelStyles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700',
     marginTop: -2,
+  },
+});
+
+const localStyles = StyleSheet.create({
+  accountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  accountNickname: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  accountBoid: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  iconBtn: {
+    padding: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 44,
+    height: 44,
   },
 });
