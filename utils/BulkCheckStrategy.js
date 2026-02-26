@@ -53,7 +53,7 @@ export const generateBulkCheckScript = (ipoName, boid) => {
     const captchaImg = document.querySelector('img[alt="captcha"]');
     if (!captchaImg) throw new Error('Captcha image not found');
     
-    const scale = 3;
+    const scale = 1;
     const canvas = document.createElement('canvas');
     canvas.width = (captchaImg.naturalWidth || captchaImg.width) * scale;
     canvas.height = (captchaImg.naturalHeight || captchaImg.height) * scale;
@@ -236,8 +236,8 @@ export const generateCaptchaExtractionScript = (boid, shouldRefresh) => {
     const finalImg = document.querySelector('img[alt="captcha"]');
     if (!finalImg) throw new Error('Captcha image not found');
     
-    // Create a high-res canvas (3x scale)
-    const scale = 3;
+    // Create a high-res canvas (1x scale for TrOCR compatibility)
+    const scale = 1;
     const canvas = document.createElement('canvas');
     canvas.width = (finalImg.naturalWidth || finalImg.width) * scale;
     canvas.height = (finalImg.naturalHeight || finalImg.height) * scale;
