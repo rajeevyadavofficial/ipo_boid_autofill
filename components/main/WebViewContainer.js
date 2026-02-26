@@ -49,7 +49,39 @@ const WebViewContainer = forwardRef(
 
     const injectionCode = `
       (function() {
-        const interval = setInterval(() => {
+        function reportCompany() {
+          const select = document.querySelector('select[name="company"]') || document.querySelector('select');
+          if (select) {
+            const selectedText = select.options[select.selectedIndex]?.text || "";
+            if (selectedText && selectedText !== "Select Company") {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                type: 'COMPANY_SELECTED', 
+                company: selectedText 
+              }));
+              return true;
+            }
+          }
+          return false;
+        }
+
+        // 1. Initial Capture
+        let initialReported = false;
+        const initialInterval = setInterval(() => {
+          if (reportCompany()) {
+            initialReported = true;
+            clearInterval(initialInterval);
+          }
+        }, 1000);
+
+        // 2. Change Listener
+        const checkInterval = setInterval(() => {
+          const select = document.querySelector('select[name="company"]') || document.querySelector('select');
+          if (select && !select.dataset.observed) {
+            select.dataset.observed = "true";
+            select.addEventListener('change', reportCompany);
+            reportCompany(); // Sync on discovery
+          }
+          
           const btn = document.querySelector('button[type="submit"]');
           if (btn && !btn.disabled && !btn.dataset.bound) {
             btn.dataset.bound = "true";
@@ -65,9 +97,8 @@ const WebViewContainer = forwardRef(
                 window.ReactNativeWebView.postMessage(result);
               }, 1000);
             });
-            clearInterval(interval);
           }
-        }, 500);
+        }, 1000);
       })();
       true;
     `;

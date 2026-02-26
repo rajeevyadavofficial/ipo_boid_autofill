@@ -106,7 +106,20 @@ export default function MainApp() {
           ref={webViewRef}
           currentUrl={currentUrl}
           onResultExtracted={handleResultExtracted}
-          onMessage={(e) => onWebViewMessage?.(e)}
+          onMessage={(e) => {
+            onWebViewMessage?.(e);
+            try {
+              const data = JSON.parse(e.nativeEvent.data);
+              if (data.type === 'COMPANY_SELECTED' && data.company) {
+                // Update current IPO if name is different
+                if (currentIPO?.company !== data.company) {
+                  setCurrentIPO({ company: data.company });
+                }
+              }
+            } catch (err) {
+              // Ignore non-JSON messages
+            }
+          }}
           topInset={insets.top}
         />
       </View>
