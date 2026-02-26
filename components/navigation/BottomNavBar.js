@@ -6,17 +6,18 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function BottomNavBar({
   onOpenBoidModal,
+  onOpenBulkCheck,
   onOpenUpcomingIpos,
   onOpenDeveloperInfo,
 }) {
   const insets = useSafeAreaInsets();
 
-  const baseHeight = 56; // nav bar height without safe area
+  const baseHeight = 56;
   const totalHeight = baseHeight + (insets.bottom || 0);
 
   return (
@@ -30,10 +31,16 @@ export default function BottomNavBar({
       ]}
       pointerEvents="box-none"
     >
-      {/* BOID Button */}
+      {/* BOID Manager Button */}
       <TouchableOpacity style={styles.navButton} onPress={onOpenBoidModal}>
         <Ionicons name="document-text-outline" size={24} color="#fff" />
-        <Text style={styles.label}>Saved BOIDs</Text>
+        <Text style={styles.label}>BOIDs</Text>
+      </TouchableOpacity>
+
+      {/* Bulk Check Button */}
+      <TouchableOpacity style={styles.navButton} onPress={onOpenBulkCheck}>
+        <MaterialCommunityIcons name="robot-outline" size={24} color="#FFD700" />
+        <Text style={[styles.label, { color: '#FFD700' }]}>Bulk Check</Text>
       </TouchableOpacity>
 
       {/* Upcoming IPOs Button */}
@@ -60,8 +67,6 @@ const styles = StyleSheet.create({
     zIndex: 50,
     elevation: 12,
     backgroundColor: '#333a56',
-    // borderTopWidth: 1,
-    // borderColor: '#fff',
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -69,11 +74,11 @@ const styles = StyleSheet.create({
   },
   navButton: {
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   label: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 4,
   },
 });

@@ -46,11 +46,11 @@ export default function BulkCheckPanel({
   autoCheckBoid, 
   onAutoCheckComplete,
   useAiModel,
-  setUseAiModel
+  setUseAiModel,
+  onClose,
 }) {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState('selection'); 
-
 
 
   // Notify parent when viewMode changes
@@ -581,6 +581,30 @@ export default function BulkCheckPanel({
 
   return (
     <View style={panelStyles.container}>
+      {/* Header bar — shown when used as full-screen modal */}
+      {onClose && (
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#333a56',
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          paddingTop: insets.top + 8,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="robot-outline" size={22} color="#FFD700" />
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 }}>Bulk Check</Text>
+          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={{ padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }}
+          >
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* 1. SELECTION MODE: User selects company in WebView */}
       {viewMode === 'selection' && (
         <View style={panelStyles.selectionView}>

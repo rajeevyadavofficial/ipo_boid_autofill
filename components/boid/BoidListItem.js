@@ -8,16 +8,11 @@ import Toast from 'react-native-toast-message';
 export default function BoidListItem({
   item,
   index,
-  result,
   fillBoid,
-  autoCheck, 
   deleteBoid,
   startEdit,
 }) {
   const [isVisible, setIsVisible] = useState(false);
-  const isAllotted = typeof result === 'string' && result.toLowerCase().includes('congrat');
-
-
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(item.boid);
@@ -33,7 +28,6 @@ export default function BoidListItem({
   };
 
   // Mask logic: First 6 visible, then 8 stars, last 2 visible
-  // Total 16 digits. Ex: 130100********14
   const getMaskedBoid = (boid) => {
     if (!boid || boid.length < 16) return boid;
     return boid.substring(0, 6) + '********' + boid.substring(14);
@@ -45,26 +39,8 @@ export default function BoidListItem({
       activeOpacity={0.7}
       onPress={() => fillBoid(item.boid, index)}
     >
-      {/* Vertical label */}
-      {result && (
-        <View
-          style={[
-            styles.verticalLabel,
-            { backgroundColor: isAllotted ? 'green' : 'red' },
-          ]}
-        >
-          <Text style={styles.verticalLabelText}>
-            {isAllotted 
-              ? ((typeof result === 'string' && result.match(/quantity\s*:\s*(\d+)/i)?.[1])
-                ? `Alloted! (${result.match(/quantity\s*:\s*(\d+)/i)[1]})` 
-                : 'Alloted!') 
-              : 'Not Alloted!'}
-          </Text>
-        </View>
-      )}
-
       {/* Main content */}
-      <View style={{ flex: 1, paddingLeft: result ? 22 : 0 }}>
+      <View style={{ flex: 1 }}>
         <Text style={styles.nicknameText}>
           {item.nickname || 'No nickname'}
         </Text>
@@ -83,11 +59,6 @@ export default function BoidListItem({
 
       {/* Actions */}
       <View style={styles.boidActions}>
-        {!result && (
-          <TouchableOpacity onPress={() => autoCheck(item)} style={{ marginRight: 12 }}>
-             <Ionicons name="hardware-chip-outline" size={20} color="#6200EE" />
-          </TouchableOpacity>
-        )}
         <TouchableOpacity onPress={copyToClipboard} style={{ marginRight: 12 }}>
           <Ionicons name="copy-outline" size={20} color="#555" />
         </TouchableOpacity>

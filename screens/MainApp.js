@@ -1,12 +1,13 @@
 // screens/MainApp.js
 import React, { useRef, useState, useEffect } from 'react';
-import { View, ToastAndroid, StyleSheet, Platform } from 'react-native';
+import { View, ToastAndroid, StyleSheet, Platform, Modal, SafeAreaView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BoidModal from '../components/boid/BoidModal';
 import WebViewContainer from '../components/main/WebViewContainer';
 import BottomNavBar from '../components/navigation/BottomNavBar';
 import DeveloperSidebar from '../components/developer/DeveloperSidebar';
 import UpcomingIposScreen from './upcomingIpos/UpcomingIposScreen';
+import BulkCheckPanel from '../components/boid/BulkCheckPanel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiBaseUrl } from '../utils/config';
 import styles from '../styles/styles';
@@ -19,18 +20,15 @@ export default function MainApp() {
   
   const { expoPushToken } = usePushNotifications();
 
-  // Register token with backend
+  // Register push token with backend
   useEffect(() => {
     if (expoPushToken) {
       const registerToken = async () => {
         try {
-          // Use dynamic URL
           const API_URL = `${getApiBaseUrl()}/notifications/register`;
           await fetch(API_URL, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: expoPushToken }),
           });
           console.log('✅ Token sent to backend');
@@ -43,19 +41,18 @@ export default function MainApp() {
   }, [expoPushToken]);
 
   const [modalVisible, setModalVisible] = useState(false);
-  // ... rest of state
   const [boidInput, setBoidInput] = useState('');
   const [nicknameInput, setNicknameInput] = useState('');
   const [savedBoids, setSavedBoids] = useState([]);
   const [editIndex, setEditIndex] = useState(null);
   const [developerVisible, setDeveloperVisible] = useState(false);
   const [showUpcomingIpos, setShowUpcomingIpos] = useState(false);
-  const [currentUrl, setCurrentUrl] = useState(
-    'https://iporesult.cdsc.com.np/'
-  );
+  const [showBulkCheck, setShowBulkCheck] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState('https://iporesult.cdsc.com.np/');
   const [results, setResults] = useState([]);
   const [currentCheckingBoid, setCurrentCheckingBoid] = useState(null);
-  const [currentIPO, setCurrentIPO] = useState(null); // Track current IPO for bulk check
+  const [currentIPO, setCurrentIPO] = useState(null);
+  const [onWebViewMessage, setOnWebViewMessage] = useState(null);
 
   // Load saved BOIDs
   useEffect(() => {
@@ -75,8 +72,6 @@ export default function MainApp() {
     setNicknameInput('');
     setEditIndex(null);
   };
-
-  const [onWebViewMessage, setOnWebViewMessage] = useState(null);
 
   const handleResultExtracted = (resultText) => {
     if (!currentCheckingBoid) return;
@@ -111,7 +106,7 @@ export default function MainApp() {
           currentUrl={currentUrl}
           onResultExtracted={handleResultExtracted}
           onMessage={(e) => onWebViewMessage?.(e)}
-          topInset={insets.top} // Pass safe area top inset
+          topInset={insets.top}
         />
       </View>
 
@@ -120,12 +115,12 @@ export default function MainApp() {
         <View style={{ flex: 1, paddingBottom: 80 }}>
           <UpcomingIposScreen 
             onSelectIPO={(ipo) => {
-              // Clear results if selecting a different company
               if (currentIPO?.company !== ipo.company) {
                 setResults([]);
               }
               setCurrentIPO(ipo);
-              setModalVisible(true);
+              // Open Bulk Check screen directly after selecting IPO
+              setShowBulkCheck(true);
               setShowUpcomingIpos(false);
             }}
           />
@@ -136,17 +131,19 @@ export default function MainApp() {
       <View style={localStyles.bottomNavWrapper}>
         <BottomNavBar
           onOpenBoidModal={() => {
-            if (showUpcomingIpos) {
-              setShowUpcomingIpos(false);
-            }
+            if (showUpcomingIpos) setShowUpcomingIpos(false);
             setModalVisible(true);
+          }}
+          onOpenBulkCheck={() => {
+            if (showUpcomingIpos) setShowUpcomingIpos(false);
+            setShowBulkCheck(true);
           }}
           onOpenUpcomingIpos={() => setShowUpcomingIpos(!showUpcomingIpos)}
           onOpenDeveloperInfo={() => setDeveloperVisible(true)}
         />
       </View>
 
-      {/* BOID Modal */}
+      {/* BOID Manager Modal */}
       <BoidModal
         visible={modalVisible}
         setVisible={setModalVisible}
@@ -160,13 +157,32 @@ export default function MainApp() {
         setEditIndex={setEditIndex}
         saveBoidsToStorage={saveBoidsToStorage}
         resetForm={resetForm}
-        webViewRef={webViewRef}
-        results={results}
-        setResults={setResults}
-        setCurrentCheckingBoid={setCurrentCheckingBoid}
-        ipoName={currentIPO?.company} // Pass current IPO name
-        onWebViewMessage={setOnWebViewMessage}
       />
+
+      {/* Bulk Check Full-Screen Modal */}
+      <Modal
+        visible={showBulkCheck}
+        animationType="slide"
+        onRequestClose={() => setShowBulkCheck(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+          <BulkCheckPanel
+            savedBoids={Array.isArray(savedBoids) ? savedBoids.filter(b => b && b.boid) : []}
+            ipoName={currentIPO?.company}
+            webViewRef={webViewRef}
+            visible={showBulkCheck}
+            results={results}
+            setResults={setResults}
+            onModeChange={() => {}}
+            onWebViewMessage={setOnWebViewMessage}
+            autoCheckBoid={null}
+            onAutoCheckComplete={() => {}}
+            useAiModel={true}
+            setUseAiModel={() => {}}
+            onClose={() => setShowBulkCheck(false)}
+          />
+        </View>
+      </Modal>
 
       {/* Developer Sidebar */}
       <DeveloperSidebar
