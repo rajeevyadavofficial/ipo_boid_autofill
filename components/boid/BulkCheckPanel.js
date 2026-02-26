@@ -53,13 +53,12 @@ export default function BulkCheckPanel({
   const [viewMode, setViewMode] = useState('selection'); 
   const [internalUseAiModel, setInternalUseAiModel] = useState(true);
 
-  // Use local state if prop is fixed/unusable
-  const activeAiModel = typeof useAiModel === 'boolean' && setUseAiModel !== undefined && setUseAiModel.toString() !== '() => {}' 
-    ? useAiModel 
-    : internalUseAiModel;
+  // Prioritize prop state if available
+  const isAiPropFunctional = typeof useAiModel === 'boolean' && setUseAiModel;
+  const activeAiModel = isAiPropFunctional ? useAiModel : internalUseAiModel;
   
   const toggleAiModel = () => {
-    if (setUseAiModel && setUseAiModel.toString() !== '() => {}') {
+    if (isAiPropFunctional) {
       setUseAiModel(!useAiModel);
     } else {
       setInternalUseAiModel(!internalUseAiModel);
@@ -660,6 +659,11 @@ export default function BulkCheckPanel({
             <Ionicons name="hardware-chip" size={22} color="#FFD700" />
             <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 }}>Bulk Check</Text>
           </View>
+          {ipoName && (
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>{ipoName}</Text>
+            </View>
+          )}
           <TouchableOpacity
             onPress={onClose}
             style={{ padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }}
@@ -697,7 +701,7 @@ export default function BulkCheckPanel({
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="hardware-chip-outline" size={20} color={activeAiModel ? "#6A1B9A" : "#757575"} />
                   <Text style={{ fontWeight: 'bold', color: activeAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
-                    High-Precision Solver
+                    Auto Bulk Check
                   </Text>
                 </View>
                 <View 
@@ -767,14 +771,14 @@ export default function BulkCheckPanel({
           </ScrollView>
 
           {/* Start Button */}
-          <View style={{ padding: 15, paddingBottom: 40, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
+          <View style={{ padding: 15, paddingBottom: 60, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
             <TouchableOpacity  
               style={panelStyles.bulkCheckButton}
               onPress={() => handleBulkCheck()}
             >
-              <Ionicons name="play" size={20} color="white" />
+              <Ionicons name="play" size={24} color="white" />
               <Text style={panelStyles.bulkCheckText}>
-                Start Bulk Check ({Array.from(enabledBoids.values()).filter(v => v).length})
+                START BULK CHECK ({Array.from(enabledBoids.values()).filter(v => v).length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -898,11 +902,15 @@ export default function BulkCheckPanel({
 
           {/* Header */}
           <View style={panelStyles.fsHeader}>
-             <View>
+             <View style={{ flex: 1 }}>
                <Text style={panelStyles.fsTitle}>
-                 {viewMode === 'checking' ? 'Bulk Check in Progress...' : 'Check Complete!'}
+                 {viewMode === 'checking' ? 'Checking in Progress...' : 'Check Complete!'}
                </Text>
-
+               {ipoName && (
+                 <Text style={{ fontSize: 13, color: '#666', fontWeight: 'bold' }}>
+                   Company: <Text style={{ color: '#6200EE' }}>{ipoName}</Text>
+                 </Text>
+               )}
              </View>
              
              {viewMode === 'results' && (
@@ -913,28 +921,44 @@ export default function BulkCheckPanel({
           </View>
 
           {/* Progress Bar */}
-          <View style={panelStyles.fsProgressContainer}>
-              <View style={[panelStyles.fsProgressFill, { width: `${bulkCheckState.progress}%` }]} />
+          <View style={[panelStyles.fsProgressContainer, { height: 8, borderRadius: 4 }]}>
+              <View style={[panelStyles.fsProgressFill, { width: `${bulkCheckState.progress}%`, borderRadius: 4 }]} />
           </View>
 
           {/* Current Status / Captcha */}
           {viewMode === 'checking' && (
             <View style={{ flex: 1 }}>
               <View style={panelStyles.fsStatusSection}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 15 }}>
+                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 15 }}>
                   <View>
                     <Text style={panelStyles.fsStatusText}>
-                      Checking {bulkCheckState.currentIndex + 1} of {bulkCheckState.summary.total}
+                      Processing {bulkCheckState.currentIndex + 1} of {bulkCheckState.summary.total}
                     </Text>
-                    <Text style={panelStyles.fsNickname}>
-                      {bulkCheckState.currentCheckingNickname || bulkCheckState.currentCheckingBoid || 'Preparing...'}
+                    <Text style={[panelStyles.fsNickname, { color: '#6200EE' }]}>
+                      {bulkCheckState.currentCheckingNickname || bulkCheckState.currentCheckingBoid || 'Starting...'}
                     </Text>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                     <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#6200EE' }}>
+                  <View style={{ alignItems: 'flex-end', backgroundColor: '#F3E8FF', padding: 8, borderRadius: 10 }}>
+                     <Text style={{ fontSize: 18, fontWeight: '900', color: '#6200EE' }}>
                        {Math.round(bulkCheckState.progress)}%
                      </Text>
-                     <Text style={{ fontSize: 10, color: '#999' }}>COMPLETED</Text>
+                     <Text style={{ fontSize: 8, color: '#6200EE', fontWeight: 'bold' }}>COMPLETED</Text>
+                  </View>
+                </View>
+
+                {/* Summary Mini Grid during progress */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 15, width: '100%' }}>
+                  <View style={{ flex: 1, backgroundColor: '#ECFDF5', padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#10B98120' }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#10B981' }}>{bulkCheckState.summary.allotted}</Text>
+                    <Text style={{ fontSize: 8, color: '#10B981', fontWeight: 'bold' }}>ALLOTTED</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#FEF2F2', padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#EF444420' }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#EF4444' }}>{bulkCheckState.summary.notAllotted}</Text>
+                    <Text style={{ fontSize: 8, color: '#EF4444', fontWeight: 'bold' }}>NOT ALLOTTED</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#FFF7ED', padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#F9731620' }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#F97316' }}>{bulkCheckState.summary.captchaErrors + bulkCheckState.summary.errors}</Text>
+                    <Text style={{ fontSize: 8, color: '#F97316', fontWeight: 'bold' }}>ERRORS</Text>
                   </View>
                 </View>
                 
@@ -984,12 +1008,23 @@ export default function BulkCheckPanel({
                     if (isCaptchaErr) statusLabel = 'Captcha Error';
 
                     return (
-                      <View style={[panelStyles.resultCard, { opacity: isPending ? 0.7 : 1, marginBottom: 10 }]}>
+                      <View style={[
+                        panelStyles.resultCard, 
+                        { 
+                          opacity: isPending ? 0.7 : 1, 
+                          marginBottom: 10,
+                          backgroundColor: item.boid === bulkCheckState.currentCheckingBoid ? '#F5F3FF' : 'white',
+                          borderColor: item.boid === bulkCheckState.currentCheckingBoid ? '#6200EE' : '#F3F4F6',
+                          borderWidth: item.boid === bulkCheckState.currentCheckingBoid ? 1.5 : 1
+                        }
+                      ]}>
                         <View style={[panelStyles.resultCardIndicator, { backgroundColor: statusColor }]} />
                         <View style={panelStyles.resultCardContent}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <View>
-                              <Text style={panelStyles.resultCardNickname}>{item.nickname}</Text>
+                              <Text style={[panelStyles.resultCardNickname, item.boid === bulkCheckState.currentCheckingBoid && { fontWeight: '900', color: '#6200EE' }]}>
+                                {item.nickname}
+                              </Text>
                               <Text style={panelStyles.resultCardBoid}>{maskBoid(item.boid)}</Text>
                             </View>
                             <View style={[panelStyles.resultBadge, { backgroundColor: statusColor + '15' }]}>

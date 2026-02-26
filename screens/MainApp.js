@@ -53,6 +53,7 @@ export default function MainApp() {
   const [currentCheckingBoid, setCurrentCheckingBoid] = useState(null);
   const [currentIPO, setCurrentIPO] = useState(null);
   const [onWebViewMessage, setOnWebViewMessage] = useState(null);
+  const [useAiModel, setUseAiModel] = useState(true);
 
   // Load saved BOIDs
   useEffect(() => {
@@ -180,8 +181,8 @@ export default function MainApp() {
             onWebViewMessage={setOnWebViewMessage}
             autoCheckBoid={null}
             onAutoCheckComplete={() => {}}
-            useAiModel={true}
-            setUseAiModel={() => {}}
+            useAiModel={useAiModel}
+            setUseAiModel={setUseAiModel}
             onClose={() => setShowBulkCheck(false)}
           />
         </View>
