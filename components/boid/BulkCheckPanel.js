@@ -659,11 +659,6 @@ export default function BulkCheckPanel({
             <Ionicons name="hardware-chip" size={22} color="#FFD700" />
             <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 }}>Bulk Check</Text>
           </View>
-          {ipoName && (
-            <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>{ipoName}</Text>
-            </View>
-          )}
           <TouchableOpacity
             onPress={onClose}
             style={{ padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }}
@@ -673,10 +668,18 @@ export default function BulkCheckPanel({
         </View>
       )}
 
-      {/* 1. SELECTION MODE: User selects company and accounts */}
-      {viewMode === 'selection' && (
-        <View style={{ flex: 1 }}>
-          <View style={panelStyles.selectionView}>
+       {/* 1. SELECTION MODE: User selects company and accounts */}
+       {viewMode === 'selection' && (
+         <View style={{ flex: 1 }}>
+           <View style={{ paddingHorizontal: 15, paddingTop: 10 }}>
+              {ipoName && (
+                <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 10, marginBottom: 0, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
+                  <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>SELECTED COMPANY</Text>
+                  <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                </View>
+              )}
+           </View>
+           <View style={panelStyles.selectionView}>
             <View style={panelStyles.instructionContainer}>
               <Ionicons name="information-circle-outline" size={20} color="#6200EE" />
               <Text style={panelStyles.instructionText}>
@@ -810,6 +813,12 @@ export default function BulkCheckPanel({
                 </LinearGradient>
 
                 <View style={panelStyles.shareCardBody}>
+                  {ipoName && (
+                    <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 8, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
+                      <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 0.5 }}>COMPANY</Text>
+                      <Text style={{ fontSize: 13, color: '#1F2937', fontWeight: 'bold' }} numberOfLines={1}>{ipoName}</Text>
+                    </View>
+                  )}
                   <Text style={panelStyles.shareCardTitle}>IPO Allotment Status</Text>
                   <View style={panelStyles.summaryGridSmall}>
                     <View style={panelStyles.shareSumItem}>
@@ -900,25 +909,27 @@ export default function BulkCheckPanel({
             </ViewShot>
           </View>
 
-          {/* Header */}
-          <View style={panelStyles.fsHeader}>
-             <View style={{ flex: 1 }}>
-               <Text style={panelStyles.fsTitle}>
-                 {viewMode === 'checking' ? 'Checking in Progress...' : 'Check Complete!'}
-               </Text>
-               {ipoName && (
-                 <Text style={{ fontSize: 13, color: '#666', fontWeight: 'bold' }}>
-                   Company: <Text style={{ color: '#6200EE' }}>{ipoName}</Text>
-                 </Text>
-               )}
-             </View>
-             
-             {viewMode === 'results' && (
-               <TouchableOpacity onPress={() => setViewMode('selection')}>
-                 <Ionicons name="close" size={24} color="#333" />
-               </TouchableOpacity>
-             )}
-          </View>
+           <View style={panelStyles.fsHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={panelStyles.fsTitle}>
+                  {viewMode === 'checking' ? 'Processing accounts...' : 'Check Complete!'}
+                </Text>
+              </View>
+              {viewMode === 'results' && (
+                <TouchableOpacity onPress={() => setViewMode('selection')}>
+                  <Ionicons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              )}
+           </View>
+
+           <View style={{ paddingHorizontal: 20, paddingTop: 15 }}>
+              {ipoName && (
+                <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 10, marginBottom: 5, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
+                  <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>IPO COMPANY</Text>
+                  <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                </View>
+              )}
+           </View>
 
           {/* Progress Bar */}
           <View style={[panelStyles.fsProgressContainer, { height: 8, borderRadius: 4 }]}>
@@ -1074,6 +1085,13 @@ export default function BulkCheckPanel({
                       <Text style={panelStyles.totalBadgeLabel}>CHECKED</Text>
                    </View>
                 </View>
+
+                {ipoName && (
+                  <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 10, marginBottom: 15, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
+                    <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>SELECTED COMPANY</Text>
+                    <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                  </View>
+                )}
 
                 {/* Summary Section */}
                 <View style={panelStyles.summaryGrid}>
