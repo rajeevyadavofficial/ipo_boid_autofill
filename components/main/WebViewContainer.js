@@ -49,40 +49,51 @@ const WebViewContainer = forwardRef(
 
     const injectionCode = `
       (function() {
+        function getCompanyName() {
+          // Selector for CDSC portal's ng-select selected value label
+          const label = document.querySelector('ng-select[name="companyName"] .ng-value-label') || 
+                        document.querySelector('.ng-value-label');
+          return label ? label.innerText.trim() : "";
+        }
+
         function reportCompany() {
-          const select = document.querySelector('select[name="company"]') || document.querySelector('select');
-          if (select) {
-            const selectedText = select.options[select.selectedIndex]?.text || "";
-            if (selectedText && selectedText !== "Select Company") {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                type: 'COMPANY_SELECTED', 
-                company: selectedText 
-              }));
-              return true;
-            }
+          const name = getCompanyName();
+          if (name && name !== "Select company") {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ 
+              type: 'COMPANY_SELECTED', 
+              company: name 
+            }));
+            console.log("Captured Company:", name);
+            return true;
           }
           return false;
         }
 
         // 1. Initial Capture
-        let initialReported = false;
-        const initialInterval = setInterval(() => {
-          if (reportCompany()) {
-            initialReported = true;
-            clearInterval(initialInterval);
+        let lastReported = "";
+        const initInterval = setInterval(() => {
+          const current = getCompanyName();
+          if (current) {
+            reportCompany();
+            lastReported = current;
+            clearInterval(initInterval);
           }
         }, 1000);
 
-        // 2. Change Listener
-        const checkInterval = setInterval(() => {
-          const select = document.querySelector('select[name="company"]') || document.querySelector('select');
-          if (select && !select.dataset.observed) {
-            select.dataset.observed = "true";
-            select.addEventListener('change', reportCompany);
-            reportCompany(); // Sync on discovery
+        // 2. Observer for Dynamic Changes (Angular)
+        const observer = new MutationObserver(() => {
+          const current = getCompanyName();
+          if (current && current !== lastReported) {
+             reportCompany();
+             lastReported = current;
           }
-          
-          const btn = document.querySelector('button[type="submit"]');
+        });
+
+        // Watch the whole body for ng-select updates
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+        // 3. Keep standard button binding
+        const btnInterval = setInterval(() => {
           if (btn && !btn.disabled && !btn.dataset.bound) {
             btn.dataset.bound = "true";
             btn.addEventListener("click", function() {
@@ -98,7 +109,7 @@ const WebViewContainer = forwardRef(
               }, 1000);
             });
           }
-        }, 1000);
+        }, 2000);
       })();
       true;
     `;
