@@ -644,33 +644,37 @@ export default function BulkCheckPanel({
 
   return (
     <View style={panelStyles.container}>
-      {/* Header bar — shown when used as full-screen modal */}
-      {onClose && (
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: '#333a56',
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-          paddingTop: insets.top + 8,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="hardware-chip" size={22} color="#FFD700" />
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 }}>Bulk Check</Text>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingRight: 40 }}>
+            <Ionicons name="shield-checkmark" size={20} color="#FFD700" />
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', marginLeft: 8, letterSpacing: 0.5 }}>AUTO BULK CHECK</Text>
           </View>
-          {ipoName && (
-            <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>{ipoName}</Text>
-            </View>
-          )}
           <TouchableOpacity
             onPress={onClose}
-            style={{ padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }}
+            style={{ position: 'absolute', right: 16, top: insets.top + 8, padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }}
           >
             <Ionicons name="close" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
+      )}
+
+      {/* Premium Company Badge - Shown when company is selected */}
+      {viewMode === 'selection' && ipoName && (
+        <LinearGradient
+          colors={['#6366F1', '#4F46E5']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ margin: 15, padding: 15, borderRadius: 15, elevation: 4, shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 4 }}>SELECTED COMPANY</Text>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }} numberOfLines={2}>{ipoName}</Text>
+            </View>
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12 }}>
+              <Ionicons name="business" size={24} color="#fff" />
+            </View>
+          </View>
+        </LinearGradient>
       )}
 
       {/* 1. SELECTION MODE: User selects company and accounts */}
@@ -799,18 +803,26 @@ export default function BulkCheckPanel({
             <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }}>
               <View style={panelStyles.shareCard}>
                 <LinearGradient
-                  colors={['#6200EE', '#4A148C']}
+                  colors={['#4F46E5', '#3730A3']}
                   style={panelStyles.shareCardHeader}
                 >
-                  <Image source={require('../../assets/icon.png')} style={panelStyles.shareLogo} />
-                  <View>
-                    <Text style={panelStyles.shareAppName}>IPO RESULT - BOID AUTOFILLER</Text>
-                    <Text style={panelStyles.shareAppTagline}>Check results with confidence</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Image source={require('../../assets/icon.png')} style={panelStyles.shareLogo} />
+                    <View>
+                      <Text style={panelStyles.shareAppName}>IPO AUTO CHECKER</Text>
+                      <Text style={panelStyles.shareAppTagline}>Premium Allotment Status Report</Text>
+                    </View>
                   </View>
                 </LinearGradient>
 
                 <View style={panelStyles.shareCardBody}>
-                  <Text style={panelStyles.shareCardTitle}>IPO Allotment Status</Text>
+                  {ipoName && (
+                    <View style={{ backgroundColor: '#F3F4F6', padding: 10, borderRadius: 10, marginBottom: 15, borderLeftWidth: 4, borderLeftColor: '#4F46E5' }}>
+                      <Text style={{ fontSize: 9, color: '#6B7280', fontWeight: '900', letterSpacing: 0.5 }}>COMPANY</Text>
+                      <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                    </View>
+                  )}
+                  <Text style={panelStyles.shareCardTitle}>Final Results Summary</Text>
                   <View style={panelStyles.summaryGridSmall}>
                     <View style={panelStyles.shareSumItem}>
                       <Text style={[panelStyles.shareSumCount, { color: '#10B981' }]}>{bulkCheckState.summary.allotted}</Text>
@@ -901,15 +913,16 @@ export default function BulkCheckPanel({
           </View>
 
           {/* Header */}
-          <View style={panelStyles.fsHeader}>
+          <View style={[panelStyles.fsHeader, { borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 15 }]}>
              <View style={{ flex: 1 }}>
-               <Text style={panelStyles.fsTitle}>
-                 {viewMode === 'checking' ? 'Checking in Progress...' : 'Check Complete!'}
+               <Text style={[panelStyles.fsTitle, { fontSize: 22, color: viewMode === 'checking' ? '#4F46E5' : (bulkCheckState.summary.allotted > 0 ? '#10B981' : '#EF4444') }]}>
+                 {viewMode === 'checking' ? 'Processing Live...' : 'Report Generated! ✨'}
                </Text>
                {ipoName && (
-                 <Text style={{ fontSize: 13, color: '#666', fontWeight: 'bold' }}>
-                   Company: <Text style={{ color: '#6200EE' }}>{ipoName}</Text>
-                 </Text>
+                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                   <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#4F46E5', marginRight: 6 }} />
+                   <Text style={{ fontSize: 14, color: '#4B5563', fontWeight: '800' }}>{ipoName}</Text>
+                 </View>
                )}
              </View>
              
@@ -1058,15 +1071,15 @@ export default function BulkCheckPanel({
                 contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
               >
-                <View style={[panelStyles.resultsHeader, { alignItems: 'center' }]}>
+                <View style={[panelStyles.resultsHeader, { alignItems: 'center', marginBottom: 25 }]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[panelStyles.resultsTitle, { color: bulkCheckState.summary.allotted > 0 ? '#059669' : '#DC2626' }]}>
-                        {bulkCheckState.summary.allotted > 0 ? "Congratulations! 🎉" : "Sorry, Better luck next time! 🍀"}
+                      <Text style={[panelStyles.resultsTitle, { fontSize: 26, color: bulkCheckState.summary.allotted > 0 ? '#10B981' : '#EF4444', letterSpacing: -0.5 }]}>
+                        {bulkCheckState.summary.allotted > 0 ? "Jackpot! 🎉" : "Hard Luck! 🍀"}
                       </Text>
-                      <Text style={panelStyles.resultsSubtitle}>
+                      <Text style={[panelStyles.resultsSubtitle, { fontSize: 14, color: '#6B7280', fontWeight: '600' }]}>
                         {bulkCheckState.summary.allotted > 0 
-                          ? `You were allotted in ${bulkCheckState.summary.allotted} account(s).` 
-                          : "No allotment found in any accounts."}
+                          ? `Winning status in ${bulkCheckState.summary.allotted} account(s).` 
+                          : "Better luck in the next IPO allotment."}
                       </Text>
                     </View>
                    <View style={panelStyles.totalBadgeRefined}>
