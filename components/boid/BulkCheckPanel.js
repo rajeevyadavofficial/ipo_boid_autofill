@@ -51,6 +51,20 @@ export default function BulkCheckPanel({
 }) {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState('selection'); 
+  const [internalUseAiModel, setInternalUseAiModel] = useState(true);
+
+  // Use local state if prop is fixed/unusable
+  const activeAiModel = typeof useAiModel === 'boolean' && setUseAiModel !== undefined && setUseAiModel.toString() !== '() => {}' 
+    ? useAiModel 
+    : internalUseAiModel;
+  
+  const toggleAiModel = () => {
+    if (setUseAiModel && setUseAiModel.toString() !== '() => {}') {
+      setUseAiModel(!useAiModel);
+    } else {
+      setInternalUseAiModel(!internalUseAiModel);
+    }
+  };
 
 
   // Notify parent when viewMode changes
@@ -668,21 +682,21 @@ export default function BulkCheckPanel({
 
             {/* AI Toggle */}
             <TouchableOpacity 
-              onPress={() => setUseAiModel(!useAiModel)}
+              onPress={toggleAiModel}
               style={{ 
-                backgroundColor: useAiModel ? '#F3E5F5' : '#F5F5F5', 
-                marginHorizontal: 15, 
+                backgroundColor: activeAiModel ? '#F3E5F5' : '#F5F5F5', 
+                marginHorizontal: 0, 
                 padding: 12, 
                 borderRadius: 12, 
-                marginBottom: 10,
+                marginBottom: 0,
                 borderWidth: 1,
-                borderColor: useAiModel ? '#E1BEE7' : '#E0E0E0'
+                borderColor: activeAiModel ? '#E1BEE7' : '#E0E0E0'
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="hardware-chip-outline" size={20} color={useAiModel ? "#6A1B9A" : "#757575"} />
-                  <Text style={{ fontWeight: 'bold', color: useAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
+                  <Ionicons name="hardware-chip-outline" size={20} color={activeAiModel ? "#6A1B9A" : "#757575"} />
+                  <Text style={{ fontWeight: 'bold', color: activeAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
                     High-Precision Solver
                   </Text>
                 </View>
@@ -690,11 +704,11 @@ export default function BulkCheckPanel({
                   style={{ 
                     width: 46, 
                     height: 24, 
-                    backgroundColor: useAiModel ? '#6A1B9A' : '#BDBDBD', 
+                    backgroundColor: activeAiModel ? '#6A1B9A' : '#BDBDBD', 
                     borderRadius: 12, 
                     padding: 2,
                     justifyContent: 'center',
-                    alignItems: useAiModel ? 'flex-end' : 'flex-start'
+                    alignItems: activeAiModel ? 'flex-end' : 'flex-start'
                   }}
                 >
                   <View style={{ width: 20, height: 20, backgroundColor: 'white', borderRadius: 10, elevation: 2 }} />
@@ -748,7 +762,7 @@ export default function BulkCheckPanel({
           </ScrollView>
 
           {/* Start Button */}
-          <View style={{ padding: 15, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
+          <View style={{ padding: 15, paddingBottom: 25, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
             <TouchableOpacity  
               style={panelStyles.bulkCheckButton}
               onPress={() => handleBulkCheck()}
@@ -1260,6 +1274,10 @@ export default function BulkCheckPanel({
 }
 
 const panelStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
   // New Styles for Selection View
   selectionView: {
     padding: 16,
