@@ -92,8 +92,8 @@ android {
         applicationId 'com.rajeevy396.ipoboidautofill'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "1.0.7"
+        versionCode 16
+        versionName "1.0.8"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

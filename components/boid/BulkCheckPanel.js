@@ -244,7 +244,10 @@ export default function BulkCheckPanel({
 
           // STEP 2: Solve (AI or Manual)
           if (activeAiModel) {
-            console.log(`[Bulk] Step 2: Solving Captcha via TrOCR Engine for ${boidString}`);
+            // Add a small random jitter (0-2s) to stagger requests if many users are checking
+            const jitter = Math.floor(Math.random() * 2000);
+            if (i > 0) await sleep(jitter);
+
             try {
               const formData = new FormData();
               formData.append('image', {
@@ -259,14 +262,29 @@ export default function BulkCheckPanel({
                 headers: { 'Accept': 'application/json' }
               });
 
-              const rawResponse = await solveResponse.text();
-              const solveData = JSON.parse(rawResponse);
+              const solveData = await solveResponse.json();
               
-              if (solveData.success) {
-                console.log(`✅ [Bulk] Captcha solved via AI: ${solveData.captchaText}`);
+              if (solveData.success && solveData.status === 'completed') {
+                console.log(`✅ [Bulk] Captcha solved: ${solveData.captchaText}`);
                 finalCaptcha = solveData.captchaText;
                 setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
                 if (finalCaptcha.length === 5) solveSuccess = true;
+              } else if (solveData.success && solveData.jobId) {
+                // Fallback for old server instances still using queuing
+                console.log(`📡 [Bulk] Legacy Job ${solveData.jobId} queued. Polling...`);
+                let pollAttempts = 0;
+                while (pollAttempts < 20) {
+                  await sleep(1000);
+                  pollAttempts++;
+                  const stRes = await fetch(`${API_URL}/captcha/status/${solveData.jobId}`);
+                  const stData = await stRes.json();
+                  if (stData.status === 'completed') {
+                    finalCaptcha = stData.captchaText;
+                    setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
+                    if (finalCaptcha.length === 5) solveSuccess = true;
+                    break;
+                  }
+                }
               }
             } catch (err) {
               console.warn(`⚠️ [Bulk] AI Solve failed: ${err.message}`);
