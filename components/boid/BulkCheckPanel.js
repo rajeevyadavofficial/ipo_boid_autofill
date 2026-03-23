@@ -82,7 +82,7 @@ export default function BulkCheckPanel({
     currentCaptcha: null, 
     currentCaptchaImage: null, 
     results: [],
-    summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 },
+    summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, captchaErrors: 0, skipped: 0, totalShares: 0 },
     currentCheckingNickname: '',
     currentCheckingBoid: ''
   });
@@ -186,7 +186,7 @@ export default function BulkCheckPanel({
       progress: 0,
       currentIndex: 0,
       results: initialResults,
-      summary: { total: finalTargetBoids.length, allotted: 0, notAllotted: 0, errors: 0, totalShares: 0 },
+      summary: { total: finalTargetBoids.length, allotted: 0, notAllotted: 0, errors: 0, captchaErrors: 0, skipped: 0, totalShares: 0 },
       currentCheckingNickname: '',
       currentCheckingBoid: ''
     });
@@ -264,25 +264,32 @@ export default function BulkCheckPanel({
 
               const solveData = await solveResponse.json();
               
-              if (solveData.success && solveData.status === 'completed') {
-                console.log(`✅ [Bulk] Captcha solved: ${solveData.captchaText}`);
+              if (solveData.success && (solveData.status === 'completed' || solveData.captchaText)) {
+                console.log(`✅ [Bulk] Captcha solved directly: ${solveData.captchaText}`);
                 finalCaptcha = solveData.captchaText;
                 setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
                 if (finalCaptcha.length === 5) solveSuccess = true;
               } else if (solveData.success && solveData.jobId) {
-                // Fallback for old server instances still using queuing
-                console.log(`📡 [Bulk] Legacy Job ${solveData.jobId} queued. Polling...`);
+                console.log(`📡 [Bulk] Job ${solveData.jobId} queued. Polling...`);
                 let pollAttempts = 0;
-                while (pollAttempts < 20) {
-                  await sleep(1000);
+                const MAX_POLL = 40; // Wait up to 80 seconds
+                while (pollAttempts < MAX_POLL) {
+                  await sleep(2000);
                   pollAttempts++;
-                  const stRes = await fetch(`${API_URL}/captcha/status/${solveData.jobId}`);
-                  const stData = await stRes.json();
-                  if (stData.status === 'completed') {
-                    finalCaptcha = stData.captchaText;
-                    setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
-                    if (finalCaptcha.length === 5) solveSuccess = true;
-                    break;
+                  try {
+                    const stRes = await fetch(`${API_URL}/captcha/status/${solveData.jobId}`);
+                    const stData = await stRes.json();
+                    if (stData.status === 'completed' && stData.captchaText) {
+                      finalCaptcha = stData.captchaText;
+                      console.log(`✅ [Bulk] Polling result for ${solveData.jobId}: ${finalCaptcha}`);
+                      setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
+                      if (finalCaptcha.length === 5) solveSuccess = true;
+                      break;
+                    } else if (stData.status === 'failed') {
+                      throw new Error(stData.error || 'Job failed in worker');
+                    }
+                  } catch (pollErr) {
+                    console.warn(`⚠️ [Bulk] Poll Error (Attempt ${pollAttempts}): ${pollErr.message}`);
                   }
                 }
               }
