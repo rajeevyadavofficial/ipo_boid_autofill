@@ -237,19 +237,13 @@ export default function MerShareAccountModal({ onClose }) {
           </ScrollView>
         ) : (
           <View style={{ flex: 1 }}>
-            <FlatList
-              data={accounts}
-              keyExtractor={(_, i) => i.toString()}
-              style={{ flex: 1 }}
+            <ScrollView 
+              style={{ flex: 1 }} 
               contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
-              ListEmptyComponent={
-                <View style={{ alignItems: 'center', marginTop: 40, opacity: 0.5 }}>
-                  <Ionicons name="person-circle-outline" size={56} color="#999" />
-                  <Text style={{ color: '#999', marginTop: 10 }}>No accounts yet. Tap + to add.</Text>
-                </View>
-              }
-              renderItem={({ item, index }) => (
-                <View style={styles.accountCard}>
+              keyboardShouldPersistTaps="handled"
+            >
+              {accounts.map((item, index) => (
+                <View key={index.toString()} style={styles.accountCard}>
                   <View style={styles.accountAvatar}>
                     <Text style={styles.avatarText}>{(item.nickname || '?')[0].toUpperCase()}</Text>
                   </View>
@@ -265,8 +259,14 @@ export default function MerShareAccountModal({ onClose }) {
                     <Ionicons name="trash-outline" size={20} color="#F44336" />
                   </TouchableOpacity>
                 </View>
+              ))}
+              {accounts.length === 0 && (
+                <View style={{ alignItems: 'center', marginTop: 40, opacity: 0.5 }}>
+                  <Ionicons name="person-circle-outline" size={56} color="#999" />
+                  <Text style={{ color: '#999', marginTop: 10 }}>No accounts yet. Tap + to add.</Text>
+                </View>
               )}
-            />
+            </ScrollView>
             <TouchableOpacity style={[styles.addBtn, { marginBottom: Math.max(insets.bottom, 16) }]}
               onPress={() => { resetForm(); setShowForm(true); }}>
               <Ionicons name="add" size={20} color="#fff" />
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   // DP Picker overlay (plain View, not Modal)
   dpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000088', justifyContent: 'flex-end', zIndex: 100 },
-  dpSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 16 },
+  dpSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 16, width: '100%', minHeight: '40%' },
   dpTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12, color: '#333' },
   dpSearch: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, marginHorizontal: 12, padding: 10, marginBottom: 8, fontSize: 14 },
   dpItem: { paddingVertical: 13, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
