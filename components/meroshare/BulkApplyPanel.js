@@ -7,17 +7,13 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import CryptoJS from 'crypto-js';
 import Toast from 'react-native-toast-message';
 import { getApiBaseUrl } from '../../utils/config';
 
 const STORAGE_KEY = 'meroshareAccounts';
-const ENCRYPT_SECRET = 'ms_ipo_app_secret_2025';
 
-const decrypt = (cipher) => {
-  try {
-    return CryptoJS.AES.decrypt(cipher, ENCRYPT_SECRET).toString(CryptoJS.enc.Utf8);
-  } catch { return ''; }
+const decrypt = (encoded) => {
+  try { return decodeURIComponent(escape(atob(encoded))); } catch { return ''; }
 };
 
 const loadAccounts = async () => {
