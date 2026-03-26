@@ -74,6 +74,18 @@ const styles = StyleSheet.create({
   dpSearch: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, marginHorizontal: 12, padding: 10, marginBottom: 8, fontSize: 14 },
   dpItem: { paddingVertical: 13, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   dpItemText: { fontSize: 14, color: '#333' },
+  securityAlert: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#E3F2FD', 
+    padding: 12, 
+    borderRadius: 10, 
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+    gap: 10
+  },
+  securityAlertText: { fontSize: 12, color: '#0D47A1', flex: 1, lineHeight: 17, fontWeight: '500' },
 });
 
 export const loadMerShareAccounts = async () => {
@@ -161,6 +173,7 @@ export default function MerShareAccountModal({ onClose }) {
   const [form, setForm] = useState({ nickname: '', dpId: '', dpName: '', username: '', password: '', pin: '', crnNumber: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showPin, setShowPin] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState(null); // null, 'verifying', 'success', 'error'
 
   useEffect(() => {
     loadMerShareAccounts().then(setAccounts);
@@ -193,34 +206,53 @@ export default function MerShareAccountModal({ onClose }) {
     setEditIndex(null);
     setShowPassword(false);
     setShowPin(false);
+    setVerificationStatus(null);
   };
 
   const handleSave = async () => {
-    if (!form.dpId || !form.username || !form.password || !form.pin || !form.crnNumber) {
+    const cleanUsername = (form.username || '').trim();
+    const cleanPassword = (form.password || '').trim();
+    const cleanCrn = (form.crnNumber || '').trim();
+    const cleanPin = (form.pin || '').trim();
+
+    if (!form.dpId || !cleanUsername || !cleanPassword || !cleanPin || !cleanCrn) {
       Toast.show({ type: 'error', text1: 'All fields required', text2: 'DP, Username, Password, PIN and CRN are required.' });
       return;
     }
-    if (form.pin.length !== 4) {
+    if (cleanPin.length !== 4) {
       Toast.show({ type: 'error', text1: 'Invalid PIN', text2: 'PIN must be exactly 4 digits.' });
       return;
     }
 
     setDpLoading(true); // Reuse loading state for validation
+    setVerificationStatus('verifying');
+    console.log('🚀 [Save] Starting verification for:', form.username);
+    
     try {
+      const apiUrl = `${getApiBaseUrl()}/meroshare/validate`;
+      console.log('🔗 [Save] Calling:', apiUrl);
+
       // Auto-verify credentials before saving
-      const validateRes = await fetch(`${getApiBaseUrl()}/meroshare/validate`, {
+      const validateRes = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
-          dpId: form.dpId,
-          username: form.username,
-          password: form.password,
+          clientId: parseInt(form.dpId), // Ensure numeric
+          username: cleanUsername,
+          password: cleanPassword,
         }),
       });
+
+      console.log('📡 [Save] Response status:', validateRes.status);
       const validateData = await validateRes.json();
+      console.log('📦 [Save] Response data:', validateData);
       
       if (!validateData.success) {
         setDpLoading(false);
+        setVerificationStatus('error');
         Toast.show({ 
           type: 'error', 
           text1: 'Verification Failed', 
@@ -229,25 +261,41 @@ export default function MerShareAccountModal({ onClose }) {
         return;
       }
 
+      // Success branch
+      setVerificationStatus('success');
+      
       const newAccount = {
-        nickname: form.nickname || form.username,
+        nickname: form.nickname.trim() || cleanUsername,
         dpId: form.dpId,
         dpName: form.dpName,
-        username: form.username,
-        crnNumber: form.crnNumber,
-        encryptedPassword: encrypt(form.password),
-        encryptedPin: encrypt(form.pin),
+        username: cleanUsername,
+        crnNumber: cleanCrn,
+        encryptedPassword: encrypt(cleanPassword),
+        encryptedPin: encrypt(cleanPin),
       };
+      
       const updated = [...accounts];
       if (editIndex !== null) updated[editIndex] = newAccount;
       else updated.push(newAccount);
+      
       await saveMerShareAccounts(updated);
       setAccounts(updated);
-      setShowForm(false);
-      resetForm();
-      Toast.show({ type: 'success', text1: editIndex !== null ? '✅ Account Updated' : '✅ Account Verified & Saved' });
+      
+      // Brief delay to let user see "Verified" status
+      setTimeout(() => {
+        setShowForm(false);
+        resetForm();
+        Toast.show({ type: 'success', text1: editIndex !== null ? '✅ Account Updated' : '✅ Account Verified & Saved' });
+      }, 1000);
+
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Connection Error', text2: 'Failed to verify account. Try again.' });
+      console.error('❌ [Save] Error during verification:', err.message);
+      setVerificationStatus('error');
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Connection Error', 
+        text2: 'Server is waking up or connection failed. Please try again in 10 seconds.' 
+      });
     } finally {
       setDpLoading(false);
     }
@@ -292,6 +340,12 @@ export default function MerShareAccountModal({ onClose }) {
 
         {showForm ? (
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 40) }}>
+            <View style={styles.securityAlert}>
+              <Ionicons name="shield-checkmark" size={20} color="#2196F3" />
+              <Text style={styles.securityAlertText}>
+                Your data is safe. MeroShare credentials are encrypted locally on your phone using industry standards.
+              </Text>
+            </View>
             <Text style={styles.formTitle}>{editIndex !== null ? 'Edit Account' : 'Add MeroShare Account'}</Text>
 
             <Text style={styles.label}>Nickname (optional)</Text>
@@ -346,16 +400,43 @@ export default function MerShareAccountModal({ onClose }) {
               <Text style={styles.encryptText}>Password & PIN stored encrypted on device</Text>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-              <TouchableOpacity style={[styles.btn, { backgroundColor: '#eee', flex: 1 }]}
-                onPress={() => { setShowForm(false); resetForm(); }}>
-                <Text style={{ color: '#333', fontWeight: '600' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, { backgroundColor: '#6200EE', flex: 2 }]} onPress={handleSave}>
-                <Text style={{ color: '#fff', fontWeight: '700' }}>
-                  {editIndex !== null ? 'Update Account' : 'Save Account'}
-                </Text>
-              </TouchableOpacity>
+            <View style={{ marginTop: 16 }}>
+              {verificationStatus === 'verifying' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, gap: 8 }}>
+                  <ActivityIndicator size="small" color="#6200EE" />
+                  <Text style={{ color: '#6200EE', fontWeight: '600' }}>Verifying Account...</Text>
+                </View>
+              )}
+              {verificationStatus === 'success' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, gap: 8 }}>
+                  <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                  <Text style={{ color: '#4CAF50', fontWeight: '700' }}>Verification Successful!</Text>
+                </View>
+              )}
+              {verificationStatus === 'error' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, gap: 8 }}>
+                  <Ionicons name="close-circle" size={18} color="#F44336" />
+                  <Text style={{ color: '#F44336', fontWeight: '700' }}>Verification Failed</Text>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity style={[styles.btn, { backgroundColor: '#eee', flex: 1 }]}
+                  onPress={() => { setShowForm(false); resetForm(); }}>
+                  <Text style={{ color: '#333', fontWeight: '600' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.btn, { backgroundColor: verificationStatus === 'success' ? '#4CAF50' : '#6200EE', flex: 2, opacity: dpLoading ? 0.7 : 1 }]} 
+                  onPress={handleSave}
+                  disabled={dpLoading || verificationStatus === 'success'}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>
+                    {verificationStatus === 'verifying' ? 'Verifying...' : 
+                     verificationStatus === 'success' ? 'Verified ✓' :
+                     (editIndex !== null ? 'Update Account' : 'Save Account')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
         ) : (
@@ -365,6 +446,14 @@ export default function MerShareAccountModal({ onClose }) {
               contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
               keyboardShouldPersistTaps="handled"
             >
+              {accounts.length > 0 && (
+                <View style={[styles.securityAlert, { backgroundColor: '#F1F8E9', borderLeftColor: '#4CAF50' }]}>
+                  <Ionicons name="lock-closed" size={20} color="#4CAF50" />
+                  <Text style={[styles.securityAlertText, { color: '#1B5E20' }]}>
+                    All saved accounts are encrypted and verified. Only you can access your credentials.
+                  </Text>
+                </View>
+              )}
               {accounts.map((item, index) => (
                 <View key={index.toString()} style={styles.accountCard}>
                   <View style={styles.accountAvatar}>
