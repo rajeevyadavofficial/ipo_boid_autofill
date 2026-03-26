@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, FlatList,
+  View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, ActivityIndicator, Platform,
-  KeyboardAvoidingView, Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,10 +27,11 @@ const saveMerShareAccounts = async (accounts) => {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
 };
 
-// DP Picker rendered as a full-screen overlay (NOT a Modal) to avoid Android nested-Modal crash
+// DP Picker as an absolutely-positioned overlay (no Modal) to avoid Android nested-Modal crash.
+// Uses ScrollView + map (not FlatList) because FlatList needs explicit height in absolute overlays.
 function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, onSelect, onClose, insets }) {
   if (!visible) return null;
-  const filtered = dpList.filter(dp =>
+  const filtered = (dpList || []).filter(dp =>
     (dp.name || dp.dp || '').toLowerCase().includes(dpSearch.toLowerCase())
   );
   return (
@@ -42,19 +43,23 @@ function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, on
           placeholder="Search DP..."
           value={dpSearch}
           onChangeText={setDpSearch}
+          autoFocus
         />
         {dpLoading
           ? <ActivityIndicator style={{ marginTop: 30 }} color="#6200EE" />
           : (
-            <FlatList
-              data={filtered}
-              keyExtractor={(item, i) => (item.id || i).toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.dpItem} onPress={() => onSelect(item)}>
+            <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+              {filtered.map((item, i) => (
+                <TouchableOpacity key={(item.id || i).toString()} style={styles.dpItem} onPress={() => onSelect(item)}>
                   <Text style={styles.dpItemText}>{item.name || item.dp}</Text>
                 </TouchableOpacity>
+              ))}
+              {filtered.length === 0 && (
+                <Text style={{ textAlign: 'center', color: '#999', marginTop: 20, padding: 16 }}>
+                  {dpLoading ? '' : 'No results found.'}
+                </Text>
               )}
-            />
+            </ScrollView>
           )
         }
         <TouchableOpacity style={[styles.btn, { backgroundColor: '#eee', margin: 12 }]} onPress={onClose}>
