@@ -87,11 +87,18 @@ const saveMerShareAccounts = async (accounts) => {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
 };
 
-function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, onSelect, onClose, insets }) {
+function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, onSelect, onClose, onRetry, insets }) {
   if (!visible) return null;
-  const filtered = (dpList || []).filter(dp => 
-    dp && (dp.name || dp.dp || '').toLowerCase().includes((dpSearch || '').toLowerCase())
-  );
+  
+  // Broad filter that checks all string values in the DP object
+  const filtered = (dpList || []).filter(dp => {
+    if (!dp) return false;
+    const search = (dpSearch || '').toLowerCase();
+    if (!search) return true;
+    return Object.values(dp).some(val => 
+      String(val).toLowerCase().includes(search)
+    );
+  });
 
   return (
     <View style={styles.dpOverlay}>
@@ -99,21 +106,36 @@ function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, on
         <Text style={styles.dpTitle}>Select Depository Participant</Text>
         <TextInput
           style={styles.dpSearch}
-          placeholder="Search DP..."
+          placeholder="Search DP (e.g. Global, NIBL)..."
           value={dpSearch}
           onChangeText={setDpSearch}
         />
         {dpLoading
-          ? <ActivityIndicator style={{ marginTop: 30 }} color="#6200EE" />
+          ? (
+            <View style={{ padding: 40 }}>
+              <ActivityIndicator color="#6200EE" size="large" />
+              <Text style={{ textAlign: 'center', marginTop: 10, color: '#666' }}>Fetching broker list...</Text>
+            </View>
+          )
           : (
             <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
               {filtered.map((item, i) => (
-                <TouchableOpacity key={(item?.id || i).toString()} style={styles.dpItem} onPress={() => onSelect(item)}>
-                  <Text style={styles.dpItemText}>{item?.name || item?.dp || 'Unknown'}</Text>
+                <TouchableOpacity key={(item?.id || item?.code || i).toString()} style={styles.dpItem} onPress={() => onSelect(item)}>
+                  <Text style={styles.dpItemText}>{item?.name || item?.capitalName || item?.dp || `Broker ${item?.id || item?.code || i}`}</Text>
+                  <Text style={{ fontSize: 10, color: '#999' }}>Code: {item?.code || item?.id}</Text>
                 </TouchableOpacity>
               ))}
-              {filtered.length === 0 && !dpLoading && (
-                <Text style={{ textAlign: 'center', color: '#999', marginTop: 20, padding: 16 }}>No results found.</Text>
+              {filtered.length === 0 && (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Ionicons name="alert-circle-outline" size={48} color="#ccc" />
+                  <Text style={{ textAlign: 'center', color: '#999', marginTop: 20 }}>No results found.</Text>
+                  <TouchableOpacity 
+                    onPress={onRetry} 
+                    style={{ marginTop: 15, backgroundColor: '#f0f0f0', padding: 10, borderRadius: 8 }}
+                  >
+                    <Text style={{ color: '#6200EE', fontWeight: '700' }}>Retry Fetching List</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </ScrollView>
           )
@@ -146,16 +168,21 @@ export default function MerShareAccountModal({ onClose }) {
   }, []);
 
   const fetchDpList = async () => {
+    if (dpLoading) return;
     setDpLoading(true);
     try {
+      console.log('🔗 Fetching DP list from:', `${getApiBaseUrl()}/meroshare/dp`);
       const res = await fetch(`${getApiBaseUrl()}/meroshare/dp`);
-      if (!res.ok) throw new Error('Network error');
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
+        console.log(`✅ Fetched ${data.data.length} brokers`);
         setDpList(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to fetch brooker list');
       }
     } catch (e) {
       console.warn('Failed to fetch DP list:', e.message);
+      Toast.show({ type: 'error', text1: 'Broker List Error', text2: e.message || 'Check your internet connection' });
     } finally {
       setDpLoading(false);
     }
@@ -202,8 +229,8 @@ export default function MerShareAccountModal({ onClose }) {
       dpId: acc.dpId,
       dpName: acc.dpName,
       username: acc.username,
-      password: decrypt(acc.encryptedPassword),
-      pin: decrypt(acc.encryptedPin),
+      password: decrypt(acc.encryptedPassword || ''),
+      pin: decrypt(acc.encryptedPin || ''),
     });
     setEditIndex(index);
     setShowForm(true);
@@ -340,12 +367,13 @@ export default function MerShareAccountModal({ onClose }) {
           dpLoading={dpLoading}
           dpSearch={dpSearch}
           setDpSearch={setDpSearch}
+          onRetry={fetchDpList}
           onSelect={(item) => {
             if (item) {
               setForm(p => ({
                 ...p,
-                dpId: (item.id || item.dp || '').toString(),
-                dpName: item.name || item.dp || '',
+                dpId: (item.id || item.dp || item.code || '').toString(),
+                dpName: item.name || item.capitalName || item.dp || '',
               }));
             }
             setDpSearch('');

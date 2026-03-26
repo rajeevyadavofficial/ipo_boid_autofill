@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList,
+  View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, ScrollView, TextInput, Modal,
   Platform
 } from 'react-native';
@@ -12,8 +12,36 @@ import { getApiBaseUrl } from '../../utils/config';
 
 const STORAGE_KEY = 'meroshareAccounts';
 
+// Base64 Polyfill for React Native (Hermes/JSC don't have btoa/atob globally in release)
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+const btoa = (input = '') => {
+  let str = input;
+  let output = '';
+  for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+    charCode = str.charCodeAt(i += 3 / 4);
+    if (charCode > 0xFF) throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+    block = block << 8 | charCode;
+  }
+  return output;
+};
+
+const atob = (input = '') => {
+  let str = input.replace(/=+$/, '');
+  let output = '';
+  if (str.length % 4 === 1) throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+  for (let bc = 0, bs, buffer, i = 0;
+    buffer = str.charAt(i++);
+    ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+      bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
+    buffer = chars.indexOf(buffer);
+  }
+  return output;
+};
+
 const decrypt = (encoded) => {
-  try { return decodeURIComponent(escape(atob(encoded))); } catch { return ''; }
+  try { return atob(encoded); } catch { return ''; }
 };
 
 const loadAccounts = async () => {
@@ -159,11 +187,11 @@ export default function BulkApplyPanel({ onClose }) {
             {(item.nickname || '?')[0].toUpperCase()}
           </Text>
         </View>
-        <View style={{ flex: 1 }}>
+        <div style={{ flex: 1 }}>
           <Text style={styles.resultName}>{item.nickname}</Text>
           <Text style={styles.resultUser}>{item.username}</Text>
           {item.error ? <Text style={styles.resultError}>{item.error}</Text> : null}
-        </View>
+        </div>
         <View style={{ alignItems: 'center' }}>
           {item.status === 'applying'
             ? <ActivityIndicator size="small" color="#2196F3" />
@@ -244,23 +272,27 @@ export default function BulkApplyPanel({ onClose }) {
                 </Text>
               </View>
             )
-            : accounts.map((acc, index) => {
-              const enabled = enabledAccounts.get(index);
-              return (
-                <TouchableOpacity key={index} style={[styles.accountCard, !enabled && { opacity: 0.5 }]}
-                  onPress={() => toggleAccount(index)}>
-                  <View style={[styles.accountAvatar, { backgroundColor: enabled ? '#6200EE' : '#ccc' }]}>
-                    <Text style={styles.avatarText}>{(acc.nickname || '?')[0].toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>{acc.nickname || acc.username}</Text>
-                    <Text style={styles.accountDp} numberOfLines={1}>{acc.dpName}</Text>
-                  </View>
-                  <Ionicons name={enabled ? 'checkbox' : 'square-outline'} size={22}
-                    color={enabled ? '#4CAF50' : '#ccc'} />
-                </TouchableOpacity>
-              );
-            })
+            : (
+              <View style={{ paddingBottom: 20 }}>
+                {accounts.map((acc, index) => {
+                  const enabled = enabledAccounts.get(index);
+                  return (
+                    <TouchableOpacity key={index} style={[styles.accountCard, !enabled && { opacity: 0.5 }]}
+                      onPress={() => toggleAccount(index)}>
+                      <View style={[styles.accountAvatar, { backgroundColor: enabled ? '#6200EE' : '#ccc' }]}>
+                        <Text style={styles.avatarText}>{(acc.nickname || '?')[0].toUpperCase()}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.accountName}>{acc.nickname || acc.username}</Text>
+                        <Text style={styles.accountDp} numberOfLines={1}>{acc.dpName}</Text>
+                      </View>
+                      <Ionicons name={enabled ? 'checkbox' : 'square-outline'} size={22}
+                        color={enabled ? '#4CAF50' : '#ccc'} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )
           }
 
           {/* Apply Button */}
@@ -305,12 +337,29 @@ export default function BulkApplyPanel({ onClose }) {
             </View>
           )}
 
-          <FlatList
-            data={results}
-            keyExtractor={(_, i) => i.toString()}
-            contentContainerStyle={{ padding: 16 }}
-            renderItem={({ item }) => <ResultRow item={item} />}
-          />
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+            {results.map((item, i) => (
+              <View key={i.toString()} style={styles.resultRow}>
+                <View style={[styles.resultAvatar, { backgroundColor: (STATUS_CONFIG[item.status] || STATUS_CONFIG.pending).color + '22' }]}>
+                  <Text style={[styles.avatarText, { color: (STATUS_CONFIG[item.status] || STATUS_CONFIG.pending).color }]}>
+                    {(item.nickname || '?')[0].toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.resultName}>{item.nickname}</Text>
+                  <Text style={styles.resultUser}>{item.username}</Text>
+                  {item.error ? <Text style={styles.resultError}>{item.error}</Text> : null}
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  {item.status === 'applying'
+                    ? <ActivityIndicator size="small" color="#2196F3" />
+                    : <Ionicons name={(STATUS_CONFIG[item.status] || STATUS_CONFIG.pending).icon} size={22} color={(STATUS_CONFIG[item.status] || STATUS_CONFIG.pending).color} />
+                  }
+                  <Text style={[styles.statusLabel, { color: (STATUS_CONFIG[item.status] || STATUS_CONFIG.pending).color }]}>{(STATUS_CONFIG[item.status] || STATUS_CONFIG.pending).label}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
 
           {viewMode === 'done' && (
             <TouchableOpacity style={styles.doneBtn} onPress={() => setViewMode('setup')}>
@@ -326,15 +375,13 @@ export default function BulkApplyPanel({ onClose }) {
           <View style={[styles.pickerSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <Text style={styles.pickerTitle}>Select Open IPO</Text>
             {issuesLoading
-              ? <ActivityIndicator style={{ marginTop: 30 }} color="#6200EE" />
+              ? <ActivityIndicator style={{ marginTop: 30 }} color="#6200EE" size="large" />
               : issues.length === 0
-              ? <Text style={{ textAlign: 'center', color: '#999', marginTop: 30 }}>No open IPOs at the moment.</Text>
+              ? <Text style={{ textAlign: 'center', color: '#999', marginTop: 30, padding: 20 }}>No open IPOs at the moment.</Text>
               : (
-                <FlatList
-                  data={issues}
-                  keyExtractor={(item, i) => (item.companyShareId || i).toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.issueItem} onPress={() => {
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {issues.map((item, i) => (
+                    <TouchableOpacity key={(item.companyShareId || i).toString()} style={styles.issueItem} onPress={() => {
                       setSelectedIssue(item);
                       setShowIssuePicker(false);
                     }}>
@@ -343,8 +390,8 @@ export default function BulkApplyPanel({ onClose }) {
                         {item.shareTypeName || item.shareType} • Closes: {item.closeDate || item.closeShareDate || 'N/A'}
                       </Text>
                     </TouchableOpacity>
-                  )}
-                />
+                  ))}
+                </ScrollView>
               )
             }
             <TouchableOpacity style={styles.pickerClose} onPress={() => setShowIssuePicker(false)}>
