@@ -224,10 +224,13 @@ export default function MainApp() {
       />
 
       {/* MeroShare Account Modal */}
-      <MerShareAccountModal
+      <Modal
         visible={merShareModalVisible}
-        onClose={() => setMerShareModalVisible(false)}
-      />
+        animationType="slide"
+        onRequestClose={() => setMerShareModalVisible(false)}
+      >
+        <MerShareAccountModal onClose={() => setMerShareModalVisible(false)} />
+      </Modal>
 
       {/* Bulk Apply Full-Screen Modal */}
       <Modal
