@@ -12,9 +12,69 @@ import { getApiBaseUrl } from '../../utils/config';
 
 const STORAGE_KEY = 'meroshareAccounts';
 
-// Simple base64 encoding (safe for ASCII credentials, sent over HTTPS)
+// Base64 Polyfill for React Native (Hermes/JSC don't have btoa/atob globally in release)
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+const btoa = (input = '') => {
+  let str = input;
+  let output = '';
+  for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+    charCode = str.charCodeAt(i += 3 / 4);
+    if (charCode > 0xFF) throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+    block = block << 8 | charCode;
+  }
+  return output;
+};
+
+const atob = (input = '') => {
+  let str = input.replace(/=+$/, '');
+  let output = '';
+  if (str.length % 4 === 1) throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+  for (let bc = 0, bs, buffer, i = 0;
+    buffer = str.charAt(i++);
+    ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+      bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
+    buffer = chars.indexOf(buffer);
+  }
+  return output;
+};
+
 const encrypt = (text) => { try { return btoa(text); } catch { return text; } };
 const decrypt = (encoded) => { try { return atob(encoded); } catch { return encoded; } };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#333a56', paddingHorizontal: 16, paddingVertical: 14 },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  subtitle: { fontSize: 12, color: '#aaa' },
+  closeBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  formTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 5 },
+  input: { borderWidth: 1, borderColor: '#ddd', padding: 11, borderRadius: 10, marginBottom: 12, fontSize: 14, backgroundColor: '#fff' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  eyeBtn: { padding: 11, marginLeft: 8 },
+  dpBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', padding: 11, borderRadius: 10, marginBottom: 12, backgroundColor: '#fff' },
+  dpSelected: { color: '#333', fontSize: 14, flex: 1 },
+  dpPlaceholder: { color: '#aaa', fontSize: 14, flex: 1 },
+  encryptNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  encryptText: { fontSize: 11, color: '#4CAF50' },
+  btn: { paddingVertical: 13, borderRadius: 10, alignItems: 'center' },
+  accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 10, elevation: 1 },
+  accountAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#6200EE', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  accountName: { fontWeight: '700', fontSize: 15, color: '#222' },
+  accountUser: { fontSize: 12, color: '#666' },
+  accountDp: { fontSize: 11, color: '#999', marginTop: 2 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6200EE', borderRadius: 12, paddingVertical: 14, gap: 8, marginHorizontal: 16, marginTop: 8 },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  dpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000088', justifyContent: 'flex-end', zIndex: 999 },
+  dpSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 16, width: '100%', minHeight: '40%' },
+  dpTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12, color: '#333' },
+  dpSearch: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, marginHorizontal: 12, padding: 10, marginBottom: 8, fontSize: 14 },
+  dpItem: { paddingVertical: 13, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  dpItemText: { fontSize: 14, color: '#333' },
+});
 
 export const loadMerShareAccounts = async () => {
   try {
@@ -27,13 +87,12 @@ const saveMerShareAccounts = async (accounts) => {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
 };
 
-// DP Picker as an absolutely-positioned overlay (no Modal) to avoid Android nested-Modal crash.
-// Uses ScrollView + map (not FlatList) because FlatList needs explicit height in absolute overlays.
 function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, onSelect, onClose, insets }) {
   if (!visible) return null;
-  const filtered = (dpList || []).filter(dp =>
-    (dp.name || dp.dp || '').toLowerCase().includes(dpSearch.toLowerCase())
+  const filtered = (dpList || []).filter(dp => 
+    dp && (dp.name || dp.dp || '').toLowerCase().includes((dpSearch || '').toLowerCase())
   );
+
   return (
     <View style={styles.dpOverlay}>
       <View style={[styles.dpSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -43,21 +102,18 @@ function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, on
           placeholder="Search DP..."
           value={dpSearch}
           onChangeText={setDpSearch}
-          autoFocus
         />
         {dpLoading
           ? <ActivityIndicator style={{ marginTop: 30 }} color="#6200EE" />
           : (
             <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
               {filtered.map((item, i) => (
-                <TouchableOpacity key={(item.id || i).toString()} style={styles.dpItem} onPress={() => onSelect(item)}>
-                  <Text style={styles.dpItemText}>{item.name || item.dp}</Text>
+                <TouchableOpacity key={(item?.id || i).toString()} style={styles.dpItem} onPress={() => onSelect(item)}>
+                  <Text style={styles.dpItemText}>{item?.name || item?.dp || 'Unknown'}</Text>
                 </TouchableOpacity>
               ))}
-              {filtered.length === 0 && (
-                <Text style={{ textAlign: 'center', color: '#999', marginTop: 20, padding: 16 }}>
-                  {dpLoading ? '' : 'No results found.'}
-                </Text>
+              {filtered.length === 0 && !dpLoading && (
+                <Text style={{ textAlign: 'center', color: '#999', marginTop: 20, padding: 16 }}>No results found.</Text>
               )}
             </ScrollView>
           )
@@ -93,8 +149,11 @@ export default function MerShareAccountModal({ onClose }) {
     setDpLoading(true);
     try {
       const res = await fetch(`${getApiBaseUrl()}/meroshare/dp`);
+      if (!res.ok) throw new Error('Network error');
       const data = await res.json();
-      if (data.success) setDpList(data.data);
+      if (data.success && Array.isArray(data.data)) {
+        setDpList(data.data);
+      }
     } catch (e) {
       console.warn('Failed to fetch DP list:', e.message);
     } finally {
@@ -159,7 +218,7 @@ export default function MerShareAccountModal({ onClose }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
 
         {/* Header */}
         <View style={styles.header}>
@@ -168,7 +227,7 @@ export default function MerShareAccountModal({ onClose }) {
             <Text style={styles.subtitle}>Manage accounts for bulk IPO apply</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color="#F44336" />
+            <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -275,7 +334,6 @@ export default function MerShareAccountModal({ onClose }) {
           </View>
         )}
 
-        {/* DP Picker as plain overlay View — NOT a Modal (avoids Android nested Modal crash) */}
         <DpPickerOverlay
           visible={showDpPicker}
           dpList={dpList}
@@ -283,11 +341,13 @@ export default function MerShareAccountModal({ onClose }) {
           dpSearch={dpSearch}
           setDpSearch={setDpSearch}
           onSelect={(item) => {
-            setForm(p => ({
-              ...p,
-              dpId: (item.id || item.dp || '').toString(),
-              dpName: item.name || item.dp || '',
-            }));
+            if (item) {
+              setForm(p => ({
+                ...p,
+                dpId: (item.id || item.dp || '').toString(),
+                dpName: item.name || item.dp || '',
+              }));
+            }
             setDpSearch('');
             setShowDpPicker(false);
           }}
@@ -298,37 +358,3 @@ export default function MerShareAccountModal({ onClose }) {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#333a56', paddingHorizontal: 16, paddingVertical: 14 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#6200EE' },
-  subtitle: { fontSize: 12, color: '#aaa' },
-  closeBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
-  formTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 5 },
-  input: { borderWidth: 1, borderColor: '#ddd', padding: 11, borderRadius: 10, marginBottom: 12, fontSize: 14, backgroundColor: '#fff' },
-  inputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  eyeBtn: { padding: 11, marginLeft: 8 },
-  dpBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', padding: 11, borderRadius: 10, marginBottom: 12, backgroundColor: '#fff' },
-  dpSelected: { color: '#333', fontSize: 14, flex: 1 },
-  dpPlaceholder: { color: '#aaa', fontSize: 14, flex: 1 },
-  encryptNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
-  encryptText: { fontSize: 11, color: '#4CAF50' },
-  btn: { paddingVertical: 13, borderRadius: 10, alignItems: 'center' },
-  accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 10, elevation: 1 },
-  accountAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#6200EE', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-  accountName: { fontWeight: '700', fontSize: 15, color: '#222' },
-  accountUser: { fontSize: 12, color: '#666' },
-  accountDp: { fontSize: 11, color: '#999', marginTop: 2 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6200EE', borderRadius: 12, paddingVertical: 14, gap: 8, marginHorizontal: 16, marginTop: 8 },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  // DP Picker overlay (plain View, not Modal)
-  dpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000088', justifyContent: 'flex-end', zIndex: 100 },
-  dpSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 16, width: '100%', minHeight: '40%' },
-  dpTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12, color: '#333' },
-  dpSearch: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, marginHorizontal: 12, padding: 10, marginBottom: 8, fontSize: 14 },
-  dpItem: { paddingVertical: 13, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  dpItemText: { fontSize: 14, color: '#333' },
-});
