@@ -188,6 +188,10 @@ export default function MainApp() {
             // Wait for the slide-out animation to finish for a smoother transition.
             setTimeout(() => setMerShareModalVisible(true), 600);
           }}
+        onOpenBulkApply={() => {
+            setModalVisible(false);
+            setTimeout(() => setShowBulkApply(true), 600);
+          }}
       />
 
       {/* Bulk Check Full-Screen Modal */}

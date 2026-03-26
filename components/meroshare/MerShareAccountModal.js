@@ -158,7 +158,7 @@ export default function MerShareAccountModal({ onClose }) {
   const [showDpPicker, setShowDpPicker] = useState(false);
   const [dpSearch, setDpSearch] = useState('');
 
-  const [form, setForm] = useState({ nickname: '', dpId: '', dpName: '', username: '', password: '', pin: '' });
+  const [form, setForm] = useState({ nickname: '', dpId: '', dpName: '', username: '', password: '', pin: '', crnNumber: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showPin, setShowPin] = useState(false);
 
@@ -189,37 +189,68 @@ export default function MerShareAccountModal({ onClose }) {
   };
 
   const resetForm = () => {
-    setForm({ nickname: '', dpId: '', dpName: '', username: '', password: '', pin: '' });
+    setForm({ nickname: '', dpId: '', dpName: '', username: '', password: '', pin: '', crnNumber: '' });
     setEditIndex(null);
     setShowPassword(false);
     setShowPin(false);
   };
 
   const handleSave = async () => {
-    if (!form.dpId || !form.username || !form.password || !form.pin) {
-      Toast.show({ type: 'error', text1: 'All fields required', text2: 'DP, Username, Password and PIN are required.' });
+    if (!form.dpId || !form.username || !form.password || !form.pin || !form.crnNumber) {
+      Toast.show({ type: 'error', text1: 'All fields required', text2: 'DP, Username, Password, PIN and CRN are required.' });
       return;
     }
     if (form.pin.length !== 4) {
       Toast.show({ type: 'error', text1: 'Invalid PIN', text2: 'PIN must be exactly 4 digits.' });
       return;
     }
-    const newAccount = {
-      nickname: form.nickname || form.username,
-      dpId: form.dpId,
-      dpName: form.dpName,
-      username: form.username,
-      encryptedPassword: encrypt(form.password),
-      encryptedPin: encrypt(form.pin),
-    };
-    const updated = [...accounts];
-    if (editIndex !== null) updated[editIndex] = newAccount;
-    else updated.push(newAccount);
-    await saveMerShareAccounts(updated);
-    setAccounts(updated);
-    setShowForm(false);
-    resetForm();
-    Toast.show({ type: 'success', text1: editIndex !== null ? '✅ Account Updated' : '✅ Account Added' });
+
+    setDpLoading(true); // Reuse loading state for validation
+    try {
+      // Auto-verify credentials before saving
+      const validateRes = await fetch(`${getApiBaseUrl()}/meroshare/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dpId: form.dpId,
+          username: form.username,
+          password: form.password,
+        }),
+      });
+      const validateData = await validateRes.json();
+      
+      if (!validateData.success) {
+        setDpLoading(false);
+        Toast.show({ 
+          type: 'error', 
+          text1: 'Verification Failed', 
+          text2: validateData.error || 'Please check your DP, Username and Password.' 
+        });
+        return;
+      }
+
+      const newAccount = {
+        nickname: form.nickname || form.username,
+        dpId: form.dpId,
+        dpName: form.dpName,
+        username: form.username,
+        crnNumber: form.crnNumber,
+        encryptedPassword: encrypt(form.password),
+        encryptedPin: encrypt(form.pin),
+      };
+      const updated = [...accounts];
+      if (editIndex !== null) updated[editIndex] = newAccount;
+      else updated.push(newAccount);
+      await saveMerShareAccounts(updated);
+      setAccounts(updated);
+      setShowForm(false);
+      resetForm();
+      Toast.show({ type: 'success', text1: editIndex !== null ? '✅ Account Updated' : '✅ Account Verified & Saved' });
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Connection Error', text2: 'Failed to verify account. Try again.' });
+    } finally {
+      setDpLoading(false);
+    }
   };
 
   const handleEdit = (index) => {
@@ -231,6 +262,7 @@ export default function MerShareAccountModal({ onClose }) {
       username: acc.username,
       password: decrypt(acc.encryptedPassword || ''),
       pin: decrypt(acc.encryptedPin || ''),
+      crnNumber: acc.crnNumber || '',
     });
     setEditIndex(index);
     setShowForm(true);
@@ -303,6 +335,11 @@ export default function MerShareAccountModal({ onClose }) {
                 <Ionicons name={showPin ? 'eye-off' : 'eye'} size={20} color="#666" />
               </TouchableOpacity>
             </View>
+
+            <Text style={styles.label}>CRN Number *</Text>
+            <TextInput style={styles.input} placeholder="Enter your CRN number"
+              value={form.crnNumber} onChangeText={v => setForm(p => ({ ...p, crnNumber: v }))}
+              autoCapitalize="characters" />
 
             <View style={styles.encryptNotice}>
               <Ionicons name="lock-closed" size={13} color="#4CAF50" />

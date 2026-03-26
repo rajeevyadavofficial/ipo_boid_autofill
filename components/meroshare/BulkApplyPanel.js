@@ -139,6 +139,7 @@ export default function BulkApplyPanel({ onClose }) {
       username: a.username,
       password: decrypt(a.encryptedPassword),
       pin: decrypt(a.encryptedPin),
+      crnNumber: a.crnNumber, // Pass CRN to backend
       nickname: a.nickname || a.username,
     }));
 
@@ -187,11 +188,11 @@ export default function BulkApplyPanel({ onClose }) {
             {(item.nickname || '?')[0].toUpperCase()}
           </Text>
         </View>
-        <div style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.resultName}>{item.nickname}</Text>
           <Text style={styles.resultUser}>{item.username}</Text>
           {item.error ? <Text style={styles.resultError}>{item.error}</Text> : null}
-        </div>
+        </View>
         <View style={{ alignItems: 'center' }}>
           {item.status === 'applying'
             ? <ActivityIndicator size="small" color="#2196F3" />
@@ -296,14 +297,16 @@ export default function BulkApplyPanel({ onClose }) {
           }
 
           {/* Apply Button */}
-          <TouchableOpacity
-            style={[styles.applyBtn, (!selectedIssue || accounts.length === 0) && { opacity: 0.4 }]}
-            onPress={handleApply}
-            disabled={!selectedIssue || accounts.length === 0}
-          >
-            <MaterialCommunityIcons name="send" size={20} color="#fff" />
-            <Text style={styles.applyBtnText}>Apply for All Selected</Text>
-          </TouchableOpacity>
+          <View style={{ paddingBottom: 100 }}>
+            <TouchableOpacity
+              style={[styles.applyBtn, (!selectedIssue || accounts.length === 0) && { opacity: 0.4 }]}
+              onPress={handleApply}
+              disabled={!selectedIssue || accounts.length === 0}
+            >
+              <MaterialCommunityIcons name="send" size={20} color="#fff" />
+              <Text style={styles.applyBtnText}>Apply for All Selected</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       )}
 
@@ -419,8 +422,8 @@ const styles = StyleSheet.create({
   kittaChipActive: { backgroundColor: '#6200EE', borderColor: '#6200EE' },
   kittaChipText: { fontSize: 14, color: '#555', fontWeight: '600' },
   kittaChipTextActive: { color: '#fff' },
-  kittaInput: { flex: 1, minWidth: 70, borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, fontSize: 14, backgroundColor: '#fff', color: '#333' },
-  kittaInputActive: { borderColor: '#6200EE', borderWidth: 1.5 },
+  kittaInput: { flex: 1, minWidth: 100, borderWidth: 1.5, borderColor: '#6200EE44', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, backgroundColor: '#fff', color: '#6200EE', fontWeight: 'bold', textAlign: 'center' },
+  kittaInputActive: { borderColor: '#6200EE', backgroundColor: '#F3F0FF' },
   emptyAccounts: { alignItems: 'center', paddingVertical: 40, opacity: 0.6 },
   accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, elevation: 1 },
   accountAvatar: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },

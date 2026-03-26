@@ -10,7 +10,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import styles from '../../styles/styles';
 import useBoidModal from '../../hooks/useBoidModal';
 import BoidListItem from './BoidListItem';
@@ -36,6 +36,7 @@ export default function BoidModal({
   setResults,
   setCurrentCheckingBoid,
   onOpenMerShareAccounts,
+  onOpenBulkApply,
 }) {
   const {
     showForm,
@@ -192,6 +193,18 @@ export default function BoidModal({
                 <Text style={localStyles.meroShareText}>Manage MeroShare Accounts</Text>
               </TouchableOpacity>
 
+              {/* Bulk Apply Button - NEW ENTRY POINT */}
+              <TouchableOpacity
+                onPress={() => {
+                  setVisible(false);
+                  setTimeout(() => onOpenBulkApply(), 400);
+                }}
+                style={localStyles.bulkApplyButton}
+              >
+                <MaterialCommunityIcons name="send-circle-outline" size={20} color="#fff" />
+                <Text style={localStyles.bulkApplyText}>Bulk Apply IPO (New Feature)</Text>
+              </TouchableOpacity>
+
               {/* Google Sign-In for Cloud Backup */}
               <GoogleSignIn 
                 onSignInSuccess={(user, boidList) => {
@@ -330,5 +343,27 @@ const localStyles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  bulkApplyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: '#4CAF50', // Professional Green
+    gap: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  bulkApplyText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
