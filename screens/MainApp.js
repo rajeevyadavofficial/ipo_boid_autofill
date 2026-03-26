@@ -8,6 +8,8 @@ import BottomNavBar from '../components/navigation/BottomNavBar';
 import DeveloperSidebar from '../components/developer/DeveloperSidebar';
 import UpcomingIposScreen from './upcomingIpos/UpcomingIposScreen';
 import BulkCheckPanel from '../components/boid/BulkCheckPanel';
+import MerShareAccountModal from '../components/meroshare/MerShareAccountModal';
+import BulkApplyPanel from '../components/meroshare/BulkApplyPanel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiBaseUrl } from '../utils/config';
 import styles from '../styles/styles';
@@ -54,6 +56,8 @@ export default function MainApp() {
   const [currentIPO, setCurrentIPO] = useState(null);
   const [onWebViewMessage, setOnWebViewMessage] = useState(null);
   const [useAiModel, setUseAiModel] = useState(true);
+  const [merShareModalVisible, setMerShareModalVisible] = useState(false);
+  const [showBulkApply, setShowBulkApply] = useState(false);
 
   // Load saved BOIDs
   useEffect(() => {
@@ -152,6 +156,10 @@ export default function MainApp() {
             if (showUpcomingIpos) setShowUpcomingIpos(false);
             setShowBulkCheck(true);
           }}
+          onOpenBulkApply={() => {
+            if (showUpcomingIpos) setShowUpcomingIpos(false);
+            setShowBulkApply(true);
+          }}
           onOpenUpcomingIpos={() => setShowUpcomingIpos(!showUpcomingIpos)}
           onOpenDeveloperInfo={() => setDeveloperVisible(true)}
         />
@@ -174,6 +182,12 @@ export default function MainApp() {
         webViewRef={webViewRef}
         setResults={setResults}
         setCurrentCheckingBoid={setCurrentCheckingBoid}
+        onOpenMerShareAccounts={() => {
+            setModalVisible(false);
+            // On Android, having two modals visible can sometimes cause one to not show.
+            // Wait for the slide-out animation to finish for a smoother transition.
+            setTimeout(() => setMerShareModalVisible(true), 600);
+          }}
       />
 
       {/* Bulk Check Full-Screen Modal */}
@@ -208,6 +222,21 @@ export default function MainApp() {
         webViewRef={webViewRef}
         onWebViewMessage={setOnWebViewMessage}
       />
+
+      {/* MeroShare Account Modal */}
+      <MerShareAccountModal
+        visible={merShareModalVisible}
+        onClose={() => setMerShareModalVisible(false)}
+      />
+
+      {/* Bulk Apply Full-Screen Modal */}
+      <Modal
+        visible={showBulkApply}
+        animationType="slide"
+        onRequestClose={() => setShowBulkApply(false)}
+      >
+        <BulkApplyPanel onClose={() => setShowBulkApply(false)} />
+      </Modal>
     </View>
   );
 }

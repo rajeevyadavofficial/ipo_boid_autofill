@@ -35,6 +35,7 @@ export default function BoidModal({
   webViewRef,
   setResults,
   setCurrentCheckingBoid,
+  onOpenMerShareAccounts,
 }) {
   const {
     showForm,
@@ -182,6 +183,15 @@ export default function BoidModal({
                 <Text style={localStyles.clearAllText}>Clear All BOIDs</Text>
               </TouchableOpacity>
 
+              {/* MeroShare Accounts Button */}
+              <TouchableOpacity
+                onPress={onOpenMerShareAccounts}
+                style={localStyles.meroShareButton}
+              >
+                <Ionicons name="wallet-outline" size={18} color="#6200EE" />
+                <Text style={localStyles.meroShareText}>Manage MeroShare Accounts</Text>
+              </TouchableOpacity>
+
               {/* Google Sign-In for Cloud Backup */}
               <GoogleSignIn 
                 onSignInSuccess={(user, boidList) => {
@@ -251,6 +261,25 @@ const localStyles = StyleSheet.create({
   },
   clearAllText: {
     color: '#F44336',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  meroShareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6200EE',
+    backgroundColor: '#F3E5F5',
+    gap: 8,
+  },
+  meroShareText: {
+    color: '#6200EE',
     fontWeight: '600',
     fontSize: 14,
   },

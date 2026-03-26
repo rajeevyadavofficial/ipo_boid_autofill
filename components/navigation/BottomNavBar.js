@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function BottomNavBar({
   onOpenBoidModal,
   onOpenBulkCheck,
+  onOpenBulkApply,
   onOpenUpcomingIpos,
   onOpenDeveloperInfo,
 }) {
@@ -41,6 +42,12 @@ export default function BottomNavBar({
       <TouchableOpacity style={styles.navButton} onPress={onOpenBulkCheck}>
         <MaterialCommunityIcons name="robot-outline" size={24} color="#FFD700" />
         <Text style={[styles.label, { color: '#FFD700' }]}>Bulk Check</Text>
+      </TouchableOpacity>
+
+      {/* Bulk Apply Button */}
+      <TouchableOpacity style={styles.navButton} onPress={onOpenBulkApply}>
+        <MaterialCommunityIcons name="send-circle" size={24} color="#4CAF50" />
+        <Text style={[styles.label, { color: '#4CAF50' }]}>Apply IPO</Text>
       </TouchableOpacity>
 
       {/* Upcoming IPOs Button */}
