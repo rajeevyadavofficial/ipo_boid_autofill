@@ -702,12 +702,12 @@ export default function BulkCheckPanel({
     }
 
     if (!entry) {
-      return { label: 'Idle', tone: 'idle' };
+      return { label: '', tone: 'none' };
     }
 
     switch (entry.status) {
       case 'pending':
-        return { label: 'Queued', tone: 'idle' };
+        return { label: 'Queued', tone: 'queued' };
       case 'allotted':
         return { label: entry.shares ? `Allotted ${entry.shares}` : 'Allotted', tone: 'success' };
       case 'not-allotted':
@@ -719,7 +719,7 @@ export default function BulkCheckPanel({
       case 'error':
         return { label: 'Error', tone: 'warning' };
       default:
-        return { label: 'Idle', tone: 'idle' };
+        return { label: '', tone: 'none' };
     }
   };
 
@@ -764,6 +764,7 @@ export default function BulkCheckPanel({
                 <View style={panelStyles.companyBanner}>
                   <Text style={panelStyles.companyBannerLabel}>Selected IPO</Text>
                   <Text style={panelStyles.companyBannerTitle}>{ipoName}</Text>
+                  <Text style={panelStyles.companyBannerHint}>Select company from Home screen.</Text>
                 </View>
               )}
            </View>
@@ -869,9 +870,11 @@ export default function BulkCheckPanel({
                 statusMeta.tone === 'warning' ? 'alert' :
                 statusMeta.tone === 'active' ? 'sync' :
                 statusMeta.tone === 'muted' ? 'remove' :
+                statusMeta.tone === 'queued' ? 'time-outline' :
                 'person';
               const cardForeground = isResultTone || isActiveTone ? COLORS.text : COLORS.text;
               const cardMutedText = isResultTone || isActiveTone ? 'rgba(255,255,255,0.82)' : COLORS.mutedText;
+              const shouldShowStatus = statusMeta.tone !== 'none';
               return (
                 <View
                   key={index}
@@ -890,6 +893,7 @@ export default function BulkCheckPanel({
                     statusMeta.tone === 'danger' && panelStyles.statusOrbDanger,
                     statusMeta.tone === 'warning' && panelStyles.statusOrbWarning,
                     statusMeta.tone === 'active' && panelStyles.statusOrbActive,
+                    statusMeta.tone === 'queued' && panelStyles.statusOrbQueued,
                     statusMeta.tone === 'muted' && panelStyles.statusOrbMuted,
                   ]}>
                     {isActiveTone ? (
@@ -906,25 +910,29 @@ export default function BulkCheckPanel({
                     <View style={{ flex: 1 }}>
                       <View style={panelStyles.cardTopRow}>
                         <Text style={[localStyles.accountNickname, { color: cardForeground }]}>{item.nickname || 'Unknown'}</Text>
-                        <View style={[
-                          panelStyles.inlineStatusPill,
-                          statusMeta.tone === 'success' && panelStyles.inlineStatusSuccess,
-                          statusMeta.tone === 'danger' && panelStyles.inlineStatusDanger,
-                          statusMeta.tone === 'warning' && panelStyles.inlineStatusWarning,
-                          statusMeta.tone === 'active' && panelStyles.inlineStatusActive,
-                          statusMeta.tone === 'muted' && panelStyles.inlineStatusMuted,
-                        ]}>
-                          <Text style={[
-                            panelStyles.inlineStatusText,
-                            statusMeta.tone === 'success' && panelStyles.inlineStatusTextSuccess,
-                            statusMeta.tone === 'danger' && panelStyles.inlineStatusTextDanger,
-                            statusMeta.tone === 'warning' && panelStyles.inlineStatusTextWarning,
-                            statusMeta.tone === 'active' && panelStyles.inlineStatusTextActive,
-                            statusMeta.tone === 'muted' && panelStyles.inlineStatusTextMuted,
+                        {shouldShowStatus && (
+                          <View style={[
+                            panelStyles.inlineStatusPill,
+                            statusMeta.tone === 'success' && panelStyles.inlineStatusSuccess,
+                            statusMeta.tone === 'danger' && panelStyles.inlineStatusDanger,
+                            statusMeta.tone === 'warning' && panelStyles.inlineStatusWarning,
+                            statusMeta.tone === 'active' && panelStyles.inlineStatusActive,
+                            statusMeta.tone === 'queued' && panelStyles.inlineStatusQueued,
+                            statusMeta.tone === 'muted' && panelStyles.inlineStatusMuted,
                           ]}>
-                            {statusMeta.label}
-                          </Text>
-                        </View>
+                            <Text style={[
+                              panelStyles.inlineStatusText,
+                              statusMeta.tone === 'success' && panelStyles.inlineStatusTextSuccess,
+                              statusMeta.tone === 'danger' && panelStyles.inlineStatusTextDanger,
+                              statusMeta.tone === 'warning' && panelStyles.inlineStatusTextWarning,
+                              statusMeta.tone === 'active' && panelStyles.inlineStatusTextActive,
+                              statusMeta.tone === 'queued' && panelStyles.inlineStatusTextQueued,
+                              statusMeta.tone === 'muted' && panelStyles.inlineStatusTextMuted,
+                            ]}>
+                              {statusMeta.label}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       <Text style={[localStyles.accountBoid, { color: cardMutedText }]}>{maskBoid(item.boid)}</Text>
                       {isActiveTone && (
@@ -966,11 +974,6 @@ export default function BulkCheckPanel({
 
           {/* Start Button */}
           <View style={[panelStyles.startFooter, panelStyles.startFooterInline]}>
-            <View style={panelStyles.startFooterSummary}>
-              <Text style={panelStyles.startFooterTitle}>
-                {isBulkCheckRunning ? `Checking ${bulkCheckState.currentIndex + 1}/${bulkCheckState.summary.total || 0}` : isCheckComplete ? 'Check complete' : 'Ready to run'}
-              </Text>
-            </View>
             {isCheckComplete ? (
               <TouchableOpacity
                 style={panelStyles.bulkCheckButton}
@@ -1681,6 +1684,13 @@ const panelStyles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: '700',
   },
+  companyBannerHint: {
+    marginTop: 7,
+    fontSize: 12,
+    lineHeight: 16,
+    color: COLORS.mutedText,
+    fontWeight: '600',
+  },
   selectionView: {
     padding: 16,
     gap: 14,
@@ -2025,6 +2035,10 @@ const panelStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderColor: 'rgba(255,255,255,0.26)',
   },
+  statusOrbQueued: {
+    backgroundColor: 'rgba(94,110,167,0.18)',
+    borderColor: 'rgba(94,110,167,0.38)',
+  },
   statusOrbMuted: {
     opacity: 0.7,
   },
@@ -2062,6 +2076,10 @@ const panelStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderColor: 'rgba(255,255,255,0.25)',
   },
+  inlineStatusQueued: {
+    backgroundColor: 'rgba(94,110,167,0.18)',
+    borderColor: 'rgba(94,110,167,0.38)',
+  },
   inlineStatusMuted: {
     opacity: 0.74,
   },
@@ -2081,6 +2099,9 @@ const panelStyles = StyleSheet.create({
     color: COLORS.text,
   },
   inlineStatusTextActive: {
+    color: COLORS.text,
+  },
+  inlineStatusTextQueued: {
     color: COLORS.text,
   },
   inlineStatusTextMuted: {
@@ -2168,22 +2189,12 @@ const panelStyles = StyleSheet.create({
   },
   startFooter: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 64,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    paddingTop: 8,
+    paddingBottom: 24,
+    backgroundColor: COLORS.primary,
   },
   startFooterInline: {
-    marginTop: 8,
-  },
-  startFooterSummary: {
-    marginBottom: 12,
-  },
-  startFooterTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.text,
+    marginTop: 4,
   },
   inlineStageContainer: {
     flex: 1,
@@ -2216,18 +2227,23 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
+    minHeight: 58,
+    backgroundColor: COLORS.accent,
+    paddingVertical: 17,
+    paddingHorizontal: 18,
     borderRadius: 16,
     gap: 8,
-    elevation: 3,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    elevation: 8,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
   },
   bulkCheckButtonDisabled: {
     backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
     opacity: 0.55,
     shadowOpacity: 0,
     elevation: 0,
@@ -2235,7 +2251,8 @@ const panelStyles = StyleSheet.create({
   bulkCheckText: {
     color: COLORS.text,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
+    textAlign: 'center',
   },
   progressContainer: {
     padding: 16,

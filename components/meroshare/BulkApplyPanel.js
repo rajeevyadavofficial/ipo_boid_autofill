@@ -99,6 +99,18 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
   const [showIssuePicker, setShowIssuePicker] = useState(false);
   const [dashboardAccount, setDashboardAccount] = useState(null);
 
+  const getIssueId = (issue, fallback) => (
+    issue?.companyShareId || issue?.id || issue?.shareId || fallback
+  );
+
+  const getIssueName = (issue) => (
+    issue?.companyName || issue?.name || issue?.scrip || 'Unknown IPO'
+  );
+
+  const getIssueCloseDate = (issue) => (
+    issue?.issueCloseDate || issue?.closeDate || issue?.closeShareDate || 'N/A'
+  );
+
   useEffect(() => {
     loadAccounts().then(accs => {
       setAccounts(accs);
@@ -136,7 +148,7 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
       const targetAccounts = providedAccounts || accounts;
       if (targetAccounts.length > 0) {
         const first = targetAccounts[0];
-        const token = await MeroShareApi.login(first.dpId, first.username, decrypt(first.password));
+        const token = await MeroShareApi.login(first.dpId, first.username, decrypt(first.encryptedPassword || first.password));
         if (token) {
           const directIssues = await MeroShareApi.fetchOpenIpos(token);
           if (directIssues.length > 0) {
@@ -149,16 +161,18 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
         }
       }
 
-      // 3. Last Resort: Use whatever the backend gave us (even if mock)
-      if (data.success && Array.isArray(data.data)) {
-        setIssues(data.data);
-      }
     } catch (e) {
       console.warn('Failed to fetch issues:', e.message);
     } finally {
       setIssuesLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedIssue && issues.length === 1) {
+      setSelectedIssue(issues[0]);
+    }
+  }, [issues, selectedIssue]);
 
   const resetScreen = () => {
     setResults([]);
@@ -443,26 +457,85 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
       {viewMode === 'setup' && (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
 
-          {/* Issue Selector */}
-          <Text style={styles.sectionLabel}>SELECT OPEN IPO</Text>
-          <TouchableOpacity style={styles.issueSelector} onPress={() => setShowIssuePicker(true)}>
-            {issuesLoading
-              ? <ActivityIndicator size="small" color={COLORS.accent} />
-              : selectedIssue
-              ? (
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.issueSelected}>{selectedIssue.companyName || selectedIssue.name}</Text>
-                  <Text style={styles.issueSubtext}>
-                    Closes: {selectedIssue.closeDate || selectedIssue.closeShareDate || 'N/A'}
-                  </Text>
-                </View>
-              )
-              : <Text style={styles.issuePlaceholder}>
-                  {issues.length === 0 ? 'No open IPOs found' : 'Tap to select IPO'}
-                </Text>
-            }
-            <Ionicons name="chevron-down" size={20} color={COLORS.accent} />
-          </TouchableOpacity>
+          {/* Inline Issue Selector */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>SELECT OPEN IPO</Text>
+            <TouchableOpacity
+              style={styles.refreshIssuesButton}
+              onPress={() => fetchIssues(accounts)}
+              disabled={issuesLoading}
+            >
+              {issuesLoading
+                ? <ActivityIndicator size="small" color={COLORS.text} />
+                : <Ionicons name="refresh" size={15} color={COLORS.text} />}
+            </TouchableOpacity>
+          </View>
+          {issuesLoading ? (
+            <View style={styles.issueInlineEmpty}>
+              <ActivityIndicator size="small" color={COLORS.accent} />
+              <Text style={styles.issueInlineEmptyText}>Loading open IPOs...</Text>
+            </View>
+          ) : issues.length === 0 ? (
+            <View style={styles.issueInlineEmpty}>
+              <Ionicons name="briefcase-outline" size={22} color={COLORS.mutedText} />
+              <Text style={styles.issueInlineEmptyText}>No open IPOs found</Text>
+            </View>
+          ) : (
+            <>
+            <TouchableOpacity
+              style={styles.issueSelector}
+              onPress={() => setShowIssuePicker(true)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.issueSelectorIcon}>
+                <Ionicons name="business-outline" size={18} color={COLORS.text} />
+              </View>
+              <View style={{ flex: 1 }}>
+                {selectedIssue ? (
+                  <>
+                    <Text style={styles.issueSelected} numberOfLines={2}>
+                      {getIssueName(selectedIssue)}
+                    </Text>
+                    <Text style={styles.issueSubtext} numberOfLines={1}>
+                      {selectedIssue.shareTypeName || selectedIssue.shareType || 'IPO'} - Closes: {getIssueCloseDate(selectedIssue)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.issuePlaceholder}>Choose company from dropdown</Text>
+                )}
+              </View>
+              <Ionicons name="chevron-down" size={20} color={COLORS.mutedText} />
+            </TouchableOpacity>
+            <View style={{ display: 'none' }}>
+              {issues.map((issue, index) => {
+                const issueId = getIssueId(issue, index);
+                const selectedId = getIssueId(selectedIssue, null);
+                const isSelected = selectedId === issueId;
+                return (
+                  <TouchableOpacity
+                    key={issueId.toString()}
+                    style={[styles.issueInlineCard, isSelected && styles.issueInlineCardSelected]}
+                    onPress={() => setSelectedIssue(issue)}
+                  >
+                    <View style={styles.issueInlineTopRow}>
+                      <Text style={[styles.issueInlineName, isSelected && styles.issueInlineNameSelected]} numberOfLines={2}>
+                        {getIssueName(issue)}
+                      </Text>
+                      <Ionicons
+                        name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={20}
+                        color={isSelected ? COLORS.text : COLORS.accent}
+                      />
+                    </View>
+                    <Text style={[styles.issueInlineSub, isSelected && styles.issueInlineSubSelected]} numberOfLines={1}>
+                      {issue.shareTypeName || issue.shareType || 'IPO'} • Closes: {getIssueCloseDate(issue)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            </>
+          )}
 
           {/* Kitta */}
           {activeTab === 'apply' && (
@@ -647,7 +720,7 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
                       setSelectedIssue(item);
                       setShowIssuePicker(false);
                     }}>
-                      <Text style={styles.issueItemName}>{item.companyName || item.name}</Text>
+                      <Text style={styles.issueItemName}>{getIssueName(item)}</Text>
                       <Text style={styles.issueItemSub}>
                         {item.shareTypeName || item.shareType} • Closes: {item.issueCloseDate || item.closeDate || item.closeShareDate || 'N/A'}
                       </Text>
@@ -680,10 +753,23 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontWeight: 'bold', fontSize: 18, marginLeft: 8 },
   closeBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
   sectionLabel: { fontSize: 11, fontWeight: '900', color: COLORS.mutedText, letterSpacing: 1, marginBottom: 8, marginTop: 16 },
-  issueSelector: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, borderWidth: 1.5, borderColor: COLORS.border, elevation: 1 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  refreshIssuesButton: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accent, marginTop: 10 },
+  issueSelector: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, borderWidth: 1.5, borderColor: COLORS.border, elevation: 1, gap: 10 },
+  issueSelectorIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accent },
   issueSelected: { fontWeight: '700', fontSize: 15, color: COLORS.text },
   issueSubtext: { fontSize: 12, color: COLORS.mutedText, marginTop: 2 },
   issuePlaceholder: { flex: 1, color: COLORS.mutedText, fontSize: 14 },
+  issueGrid: { gap: 10 },
+  issueInlineCard: { backgroundColor: COLORS.surface, borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: COLORS.border },
+  issueInlineCardSelected: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
+  issueInlineTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  issueInlineName: { flex: 1, fontSize: 14, lineHeight: 19, fontWeight: '800', color: COLORS.text },
+  issueInlineNameSelected: { color: COLORS.text },
+  issueInlineSub: { marginTop: 8, fontSize: 11, color: COLORS.mutedText, fontWeight: '600' },
+  issueInlineSubSelected: { color: 'rgba(255,255,255,0.78)' },
+  issueInlineEmpty: { minHeight: 68, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14 },
+  issueInlineEmptyText: { color: COLORS.mutedText, fontSize: 13, fontWeight: '700' },
   kittaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   kittaChip: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   kittaChipActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
