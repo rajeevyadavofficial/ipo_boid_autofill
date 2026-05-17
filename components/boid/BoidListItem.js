@@ -4,6 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import styles from '../../styles/styles';
 import Toast from 'react-native-toast-message';
+import { COLORS } from '../../utils/theme';
 
 export default function BoidListItem({
   item,
@@ -52,7 +53,7 @@ export default function BoidListItem({
             onPress={() => setIsVisible(!isVisible)} 
             style={{ marginLeft: 8, padding: 4 }}
           >
-             <Ionicons name={isVisible ? "eye-off-outline" : "eye-outline"} size={16} color="#666" />
+             <Ionicons name={isVisible ? "eye-off-outline" : "eye-outline"} size={16} color={COLORS.mutedText} />
           </TouchableOpacity>
         </View>
       </View>
@@ -60,16 +61,16 @@ export default function BoidListItem({
       {/* Actions */}
       <View style={styles.boidActions}>
         <TouchableOpacity onPress={copyToClipboard} style={{ marginRight: 12 }}>
-          <Ionicons name="copy-outline" size={20} color="#555" />
+          <Ionicons name="copy-outline" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => startEdit(item, index)}>
-          <Ionicons name="create-outline" size={20} color="#FF9800" />
+          <Ionicons name="create-outline" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => deleteBoid(index)}
           style={{ marginLeft: 12 }}
         >
-          <Ionicons name="trash-outline" size={20} color="#F44336" />
+          <Ionicons name="trash-outline" size={20} color={COLORS.text} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>

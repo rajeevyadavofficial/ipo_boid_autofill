@@ -81,6 +81,64 @@ export const useBoidSync = () => {
     }
   }, []);
 
+  const syncMeroshareAccountsToCloud = useCallback(async (accounts, googleId) => {
+    try {
+      setSyncing(true);
+      setSyncError(null);
+
+      const encryptedData = encryptBoidData(accounts, googleId);
+
+      const response = await fetch(`${API_URL}/meroshare/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleId, encryptedMeroshareAccountData: encryptedData })
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Sync failed');
+      }
+
+      console.log('✅ MeroShare account data synced to cloud');
+      return { success: true, lastSynced: data.lastSynced };
+    } catch (error) {
+      console.error('MeroShare sync to cloud error:', error);
+      setSyncError(error.message);
+      return { success: false, error: error.message };
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
+  const syncMeroshareAccountsFromCloud = useCallback(async (googleId) => {
+    try {
+      setSyncing(true);
+      setSyncError(null);
+
+      const response = await fetch(`${API_URL}/meroshare/sync?googleId=${googleId}`);
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Sync failed');
+      }
+
+      if (!data.encryptedMeroshareAccountData) {
+        return { success: true, accounts: [] };
+      }
+
+      const decryptedAccounts = decryptBoidData(data.encryptedMeroshareAccountData, googleId);
+      console.log('✅ MeroShare account data synced from cloud');
+      return { success: true, accounts: decryptedAccounts, lastSynced: data.lastSynced };
+    } catch (error) {
+      console.error('MeroShare sync from cloud error:', error);
+      setSyncError(error.message);
+      return { success: false, error: error.message, accounts: [] };
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
   // Sync BOID data from cloud
   const syncFromCloud = useCallback(async (googleId) => {
     try {
@@ -151,6 +209,8 @@ export const useBoidSync = () => {
     syncError,
     syncToCloud,
     syncFromCloud,
+    syncMeroshareAccountsToCloud,
+    syncMeroshareAccountsFromCloud,
     fullSync,
     encryptBoidData,
     decryptBoidData,

@@ -1,5 +1,7 @@
-import 'react-native-get-random-values';
-import { AppRegistry } from 'react-native';
+import { Platform, AppRegistry } from 'react-native';
+if (Platform.OS !== 'web') {
+  require('react-native-get-random-values');
+}
 import App from './App';
 import { name as appName } from './app.json';
 import { initRemoteConfig } from './utils/remoteConfig';

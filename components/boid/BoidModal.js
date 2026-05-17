@@ -11,13 +11,14 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import styles from '../../styles/styles';
 import useBoidModal from '../../hooks/useBoidModal';
 import BoidListItem from './BoidListItem';
 import BoidModalTopBar from './BoidModalTopBar';
 import BoidModalForm from './BoidModalForm';
-import GoogleSignIn from '../GoogleSignIn';
 import Toast from 'react-native-toast-message';
+import { COLORS } from '../../utils/theme';
 
 export default function BoidModal({
   visible,
@@ -101,49 +102,23 @@ export default function BoidModal({
     );
   };
 
-  const safeSavedBoids = Array.isArray(savedBoids) 
+  const safeSavedBoids = Array.isArray(savedBoids)
     ? savedBoids.filter(item => item && typeof item === 'object' && item.boid)
     : [];
 
   return (
     <>
-      <Modal visible={visible} animationType="slide" transparent>
-        <TouchableOpacity
-          style={styles.modalContainer}
-          activeOpacity={1}
-          onPressOut={() => {
-            setVisible(false);
-            resetForm();
-          }}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.modalContent}
-            onPress={() => {}}
-          >
-            {/* Modal Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15, paddingHorizontal: 5 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#6200EE' }}>BOID Manager</Text>
-                <Text style={{ fontSize: 12, color: '#666' }}>Manage your saved BOIDs</Text>
-              </View>
-              <TouchableOpacity 
-                onPress={() => {
-                  setVisible(false);
-                  resetForm();
-                }}
-                style={{ padding: 10, backgroundColor: '#FFEBEE', borderRadius: 20 }}
-              >
-                <Ionicons name="close" size={24} color="#F44336" />
-              </TouchableOpacity>
-            </View>
+      <StatusBar style="light" backgroundColor={COLORS.primary} />
+      <View style={{ flex: 1, backgroundColor: COLORS.primary }}>
+        <View style={{ flex: 1, padding: 16 }}>
+
 
             <BoidModalTopBar
               showForm={showForm}
               setShowForm={setShowForm}
             />
 
-            <ScrollView 
+            <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 30 }}
             >
@@ -170,8 +145,8 @@ export default function BoidModal({
               {/* Empty state */}
               {safeSavedBoids.length === 0 && (
                 <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
-                  <Ionicons name="people-outline" size={48} color="#999" />
-                  <Text style={{ color: '#999', marginTop: 10 }}>No BOIDs saved yet. Tap "+ Add BOID" to start.</Text>
+                  <Ionicons name="people-outline" size={48} color={COLORS.accent} />
+                  <Text style={{ color: COLORS.mutedText, marginTop: 10 }}>No BOIDs saved yet. Tap "+ Add BOID" to start.</Text>
                 </View>
               )}
 
@@ -180,46 +155,22 @@ export default function BoidModal({
                 onPress={handleClearAll}
                 style={localStyles.clearAllButton}
               >
-                <Ionicons name="trash-bin-outline" size={18} color="#F44336" />
+                <Ionicons name="trash-bin-outline" size={18} color={COLORS.text} />
                 <Text style={localStyles.clearAllText}>Clear All BOIDs</Text>
               </TouchableOpacity>
 
-              {/* MeroShare Accounts Button */}
-              <TouchableOpacity
-                onPress={onOpenMerShareAccounts}
-                style={localStyles.meroShareButton}
-              >
-                <Ionicons name="wallet-outline" size={18} color="#6200EE" />
-                <Text style={localStyles.meroShareText}>Manage MeroShare Accounts</Text>
-              </TouchableOpacity>
-
-              {/* Bulk Apply Button - NEW ENTRY POINT */}
-              <TouchableOpacity
-                onPress={() => {
-                  setVisible(false);
-                  setTimeout(() => onOpenBulkApply(), 400);
-                }}
-                style={localStyles.bulkApplyButton}
-              >
-                <MaterialCommunityIcons name="send-circle-outline" size={20} color="#fff" />
-                <Text style={localStyles.bulkApplyText}>Bulk Apply IPO (New Feature)</Text>
-              </TouchableOpacity>
-
-              {/* Google Sign-In for Cloud Backup */}
-              <GoogleSignIn 
-                onSignInSuccess={(user, boidList) => {
-                  if (boidList) {
-                    setSavedBoids(boidList);
-                  }
-                }}
-              />
             </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        </View>
+      </View>
 
       {/* PIN Confirmation Modal */}
-      <Modal visible={showPinModal} transparent animationType="fade">
+      <Modal
+        visible={showPinModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+      >
         <View style={localStyles.pinOverlay}>
           <View style={localStyles.pinBox}>
             <Text style={localStyles.pinTitle}>🔒 Confirm Clear All</Text>
@@ -238,13 +189,13 @@ export default function BoidModal({
             {pinError ? <Text style={localStyles.pinError}>{pinError}</Text> : null}
             <View style={{ flexDirection: 'row', marginTop: 16, gap: 10 }}>
               <TouchableOpacity
-                style={[localStyles.pinBtn, { backgroundColor: '#eee' }]}
+                style={[localStyles.pinBtn, { backgroundColor: COLORS.surface }]}
                 onPress={() => setShowPinModal(false)}
               >
-                <Text style={{ color: '#333', fontWeight: '600' }}>Cancel</Text>
+                <Text style={{ color: COLORS.text, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[localStyles.pinBtn, { backgroundColor: '#F44336' }]}
+                style={[localStyles.pinBtn, { backgroundColor: COLORS.accent }]}
                 onPress={confirmClearAll}
               >
                 <Text style={{ color: '#fff', fontWeight: '600' }}>Clear All</Text>
@@ -268,12 +219,12 @@ const localStyles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#F44336',
-    backgroundColor: '#FFF8F8',
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
     gap: 8,
   },
   clearAllText: {
-    color: '#F44336',
+    color: COLORS.text,
     fontWeight: '600',
     fontSize: 14,
   },
@@ -287,23 +238,23 @@ const localStyles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#6200EE',
-    backgroundColor: '#F3E5F5',
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
     gap: 8,
   },
   meroShareText: {
-    color: '#6200EE',
+    color: COLORS.text,
     fontWeight: '600',
     fontSize: 14,
   },
   pinOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: COLORS.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   pinBox: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 24,
     width: '80%',
@@ -313,28 +264,28 @@ const localStyles = StyleSheet.create({
   pinTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: COLORS.text,
     marginBottom: 8,
   },
   pinSubtitle: {
     fontSize: 13,
-    color: '#666',
+    color: COLORS.mutedText,
     textAlign: 'center',
     marginBottom: 16,
   },
   pinInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: COLORS.border,
     borderRadius: 8,
     padding: 12,
     width: '100%',
     fontSize: 18,
     textAlign: 'center',
     letterSpacing: 8,
-    color: '#333',
+    color: COLORS.text,
   },
   pinError: {
-    color: '#F44336',
+    color: COLORS.text,
     fontSize: 12,
     marginTop: 8,
   },
@@ -353,7 +304,7 @@ const localStyles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 10,
-    backgroundColor: '#4CAF50', // Professional Green
+    backgroundColor: COLORS.accent,
     gap: 8,
     elevation: 3,
     shadowColor: '#000',

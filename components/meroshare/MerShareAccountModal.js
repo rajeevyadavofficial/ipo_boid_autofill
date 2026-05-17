@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, ActivityIndicator, Platform,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, Modal,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { getApiBaseUrl } from '../../utils/config';
+import { MeroShareApi } from '../../services/meroShareApi';
+import AccountDashboardModal from './AccountDashboardModal';
+import { COLORS } from '../../utils/theme';
 
 const STORAGE_KEY = 'meroshareAccounts';
 
@@ -44,48 +48,48 @@ const encrypt = (text) => { try { return btoa(text); } catch { return text; } };
 const decrypt = (encoded) => { try { return atob(encoded); } catch { return encoded; } };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#333a56', paddingHorizontal: 16, paddingVertical: 14 },
+  container: { flex: 1, backgroundColor: COLORS.primary },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.surface, paddingHorizontal: 16, paddingVertical: 14 },
   title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   subtitle: { fontSize: 12, color: '#aaa' },
   closeBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
-  formTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 5 },
-  input: { borderWidth: 1, borderColor: '#ddd', padding: 11, borderRadius: 10, marginBottom: 12, fontSize: 14, backgroundColor: '#fff' },
+  formTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: COLORS.mutedText, marginBottom: 5 },
+  input: { borderWidth: 1, borderColor: COLORS.border, padding: 11, borderRadius: 10, marginBottom: 12, fontSize: 14, backgroundColor: COLORS.surface, color: COLORS.text },
   inputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   eyeBtn: { padding: 11, marginLeft: 8 },
-  dpBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', padding: 11, borderRadius: 10, marginBottom: 12, backgroundColor: '#fff' },
-  dpSelected: { color: '#333', fontSize: 14, flex: 1 },
-  dpPlaceholder: { color: '#aaa', fontSize: 14, flex: 1 },
+  dpBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, padding: 11, borderRadius: 10, marginBottom: 12, backgroundColor: COLORS.surface },
+  dpSelected: { color: COLORS.text, fontSize: 14, flex: 1 },
+  dpPlaceholder: { color: COLORS.mutedText, fontSize: 14, flex: 1 },
   encryptNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
   encryptText: { fontSize: 11, color: '#4CAF50' },
   btn: { paddingVertical: 13, borderRadius: 10, alignItems: 'center' },
-  accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 10, elevation: 1 },
-  accountAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#6200EE', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 10, elevation: 1 },
+  accountAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-  accountName: { fontWeight: '700', fontSize: 15, color: '#222' },
-  accountUser: { fontSize: 12, color: '#666' },
-  accountDp: { fontSize: 11, color: '#999', marginTop: 2 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6200EE', borderRadius: 12, paddingVertical: 14, gap: 8, marginHorizontal: 16, marginTop: 8 },
+  accountName: { fontWeight: '700', fontSize: 15, color: COLORS.text },
+  accountUser: { fontSize: 12, color: COLORS.mutedText },
+  accountDp: { fontSize: 11, color: COLORS.mutedText, marginTop: 2 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accent, borderRadius: 12, paddingVertical: 14, gap: 8, marginHorizontal: 16, marginTop: 8 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   dpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000088', justifyContent: 'flex-end', zIndex: 999 },
-  dpSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 16, width: '100%', minHeight: '40%' },
-  dpTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12, color: '#333' },
-  dpSearch: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, marginHorizontal: 12, padding: 10, marginBottom: 8, fontSize: 14 },
-  dpItem: { paddingVertical: 13, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  dpItemText: { fontSize: 14, color: '#333' },
-  securityAlert: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#E3F2FD', 
-    padding: 12, 
-    borderRadius: 10, 
+  dpSheet: { backgroundColor: COLORS.primary, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '80%', paddingTop: 16, width: '100%' },
+  dpTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12, color: COLORS.text },
+  dpSearch: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, marginHorizontal: 12, padding: 10, marginBottom: 8, fontSize: 14, color: COLORS.text, backgroundColor: COLORS.surface },
+  dpItem: { paddingVertical: 13, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  dpItemText: { fontSize: 14, color: COLORS.text },
+  securityAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    padding: 12,
+    borderRadius: 10,
     marginBottom: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
+    borderLeftColor: COLORS.accent,
     gap: 10
   },
-  securityAlertText: { fontSize: 12, color: '#0D47A1', flex: 1, lineHeight: 17, fontWeight: '500' },
+  securityAlertText: { fontSize: 12, color: COLORS.text, flex: 1, lineHeight: 17, fontWeight: '500' },
 });
 
 export const loadMerShareAccounts = async () => {
@@ -95,19 +99,19 @@ export const loadMerShareAccounts = async () => {
   } catch { return []; }
 };
 
-const saveMerShareAccounts = async (accounts) => {
+export const saveMerShareAccounts = async (accounts) => {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
 };
 
 function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, onSelect, onClose, onRetry, insets }) {
   if (!visible) return null;
-  
+
   // Broad filter that checks all string values in the DP object
   const filtered = (dpList || []).filter(dp => {
     if (!dp) return false;
     const search = (dpSearch || '').toLowerCase();
     if (!search) return true;
-    return Object.values(dp).some(val => 
+    return Object.values(dp).some(val =>
       String(val).toLowerCase().includes(search)
     );
   });
@@ -125,7 +129,7 @@ function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, on
         {dpLoading
           ? (
             <View style={{ padding: 40 }}>
-              <ActivityIndicator color="#6200EE" size="large" />
+              <ActivityIndicator color={COLORS.accent} size="large" />
               <Text style={{ textAlign: 'center', marginTop: 10, color: '#666' }}>Fetching broker list...</Text>
             </View>
           )
@@ -141,11 +145,11 @@ function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, on
                 <View style={{ padding: 40, alignItems: 'center' }}>
                   <Ionicons name="alert-circle-outline" size={48} color="#ccc" />
                   <Text style={{ textAlign: 'center', color: '#999', marginTop: 20 }}>No results found.</Text>
-                  <TouchableOpacity 
-                    onPress={onRetry} 
+                  <TouchableOpacity
+                    onPress={onRetry}
                     style={{ marginTop: 15, backgroundColor: '#f0f0f0', padding: 10, borderRadius: 8 }}
                   >
-                    <Text style={{ color: '#6200EE', fontWeight: '700' }}>Retry Fetching List</Text>
+                    <Text style={{ color: COLORS.text, fontWeight: '700' }}>Retry Fetching List</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -160,7 +164,7 @@ function DpPickerOverlay({ visible, dpList, dpLoading, dpSearch, setDpSearch, on
   );
 }
 
-export default function MerShareAccountModal({ onClose }) {
+export default function MerShareAccountModal({ onClose, embedded = false, onAccountsChange, onAccountsPersisted }) {
   const insets = useSafeAreaInsets();
   const [accounts, setAccounts] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -169,6 +173,7 @@ export default function MerShareAccountModal({ onClose }) {
   const [dpLoading, setDpLoading] = useState(false);
   const [showDpPicker, setShowDpPicker] = useState(false);
   const [dpSearch, setDpSearch] = useState('');
+  const [dashboardAccount, setDashboardAccount] = useState(null); // for account detail view
 
   const [form, setForm] = useState({ nickname: '', dpId: '', dpName: '', username: '', password: '', pin: '', crnNumber: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -179,6 +184,12 @@ export default function MerShareAccountModal({ onClose }) {
     loadMerShareAccounts().then(setAccounts);
     fetchDpList();
   }, []);
+
+  useEffect(() => {
+    if (onAccountsChange) {
+      onAccountsChange(accounts);
+    }
+  }, [accounts, onAccountsChange]);
 
   const fetchDpList = async () => {
     if (dpLoading) return;
@@ -227,43 +238,28 @@ export default function MerShareAccountModal({ onClose }) {
     setDpLoading(true); // Reuse loading state for validation
     setVerificationStatus('verifying');
     console.log('🚀 [Save] Starting verification for:', form.username);
-    
+
     try {
-      const apiUrl = `${getApiBaseUrl()}/meroshare/validate`;
-      console.log('🔗 [Save] Calling:', apiUrl);
+      // Auto-verify credentials before saving using direct API
+      const token = await MeroShareApi.login(parseInt(form.dpId), cleanUsername, cleanPassword);
 
-      // Auto-verify credentials before saving
-      const validateRes = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          clientId: parseInt(form.dpId), // Ensure numeric
-          username: cleanUsername,
-          password: cleanPassword,
-        }),
-      });
-
-      console.log('📡 [Save] Response status:', validateRes.status);
-      const validateData = await validateRes.json();
-      console.log('📦 [Save] Response data:', validateData);
-      
-      if (!validateData.success) {
+      if (!token) {
         setDpLoading(false);
         setVerificationStatus('error');
-        Toast.show({ 
-          type: 'error', 
-          text1: 'Verification Failed', 
-          text2: validateData.error || 'Please check your DP, Username and Password.' 
+        Toast.show({
+          type: 'error',
+          text1: 'Verification Failed',
+          text2: 'Please check your DP, Username and Password.'
         });
         return;
       }
 
+      // Logout after verification
+      await MeroShareApi.logout(token);
+
       // Success branch
       setVerificationStatus('success');
-      
+
       const newAccount = {
         nickname: form.nickname.trim() || cleanUsername,
         dpId: form.dpId,
@@ -273,14 +269,15 @@ export default function MerShareAccountModal({ onClose }) {
         encryptedPassword: encrypt(cleanPassword),
         encryptedPin: encrypt(cleanPin),
       };
-      
+
       const updated = [...accounts];
       if (editIndex !== null) updated[editIndex] = newAccount;
       else updated.push(newAccount);
-      
+
       await saveMerShareAccounts(updated);
       setAccounts(updated);
-      
+      onAccountsPersisted?.(updated);
+
       // Brief delay to let user see "Verified" status
       setTimeout(() => {
         setShowForm(false);
@@ -291,10 +288,10 @@ export default function MerShareAccountModal({ onClose }) {
     } catch (err) {
       console.error('❌ [Save] Error during verification:', err.message);
       setVerificationStatus('error');
-      Toast.show({ 
-        type: 'error', 
-        text1: 'Connection Error', 
-        text2: 'Server is waking up or connection failed. Please try again in 10 seconds.' 
+      Toast.show({
+        type: 'error',
+        text1: 'Connection Error',
+        text2: 'Server is waking up or connection failed. Please try again in 10 seconds.'
       });
     } finally {
       setDpLoading(false);
@@ -320,23 +317,42 @@ export default function MerShareAccountModal({ onClose }) {
     const updated = accounts.filter((_, i) => i !== index);
     await saveMerShareAccounts(updated);
     setAccounts(updated);
+    onAccountsPersisted?.(updated);
     Toast.show({ type: 'success', text1: 'Account removed' });
+  };
+
+  const openRawDataInBrowser = async (acc) => {
+    try {
+      const password = decrypt(acc.encryptedPassword || '');
+      Toast.show({ type: 'info', text1: '⏳ Fetching data...', text2: 'Opening in browser (~4 seconds)', visibilityTime: 5000 });
+      const res = await fetch(`${getApiBaseUrl()}/meroshare/raw-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: parseInt(acc.dpId), username: acc.username, password }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.viewUrl) {
+        Toast.show({ type: 'error', text1: 'Failed', text2: json.error || 'Could not fetch data' });
+        return;
+      }
+      // Open the token URL directly — works in Chrome, Edge, any browser
+      window.open(json.viewUrl, '_blank');
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message });
+    }
   };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.container}>
+        {!embedded && (
+          <>
+            <StatusBar style="light" backgroundColor={COLORS.primary} />
+            <View style={{ height: insets.top, backgroundColor: COLORS.primary }} />
+          </>
+        )}
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>MeroShare Accounts</Text>
-            <Text style={styles.subtitle}>Manage accounts for bulk IPO apply</Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
+
 
         {showForm ? (
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 40) }}>
@@ -403,8 +419,8 @@ export default function MerShareAccountModal({ onClose }) {
             <View style={{ marginTop: 16 }}>
               {verificationStatus === 'verifying' && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, gap: 8 }}>
-                  <ActivityIndicator size="small" color="#6200EE" />
-                  <Text style={{ color: '#6200EE', fontWeight: '600' }}>Verifying Account...</Text>
+                  <ActivityIndicator size="small" color={COLORS.accent} />
+                  <Text style={{ color: COLORS.text, fontWeight: '600' }}>Verifying Account...</Text>
                 </View>
               )}
               {verificationStatus === 'success' && (
@@ -425,13 +441,13 @@ export default function MerShareAccountModal({ onClose }) {
                   onPress={() => { setShowForm(false); resetForm(); }}>
                   <Text style={{ color: '#333', fontWeight: '600' }}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.btn, { backgroundColor: verificationStatus === 'success' ? '#4CAF50' : '#6200EE', flex: 2, opacity: dpLoading ? 0.7 : 1 }]} 
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: COLORS.accent, flex: 2, opacity: dpLoading ? 0.7 : 1 }]}
                   onPress={handleSave}
                   disabled={dpLoading || verificationStatus === 'success'}
                 >
                   <Text style={{ color: '#fff', fontWeight: '700' }}>
-                    {verificationStatus === 'verifying' ? 'Verifying...' : 
+                    {verificationStatus === 'verifying' ? 'Verifying...' :
                      verificationStatus === 'success' ? 'Verified ✓' :
                      (editIndex !== null ? 'Update Account' : 'Save Account')}
                   </Text>
@@ -441,8 +457,8 @@ export default function MerShareAccountModal({ onClose }) {
           </ScrollView>
         ) : (
           <View style={{ flex: 1 }}>
-            <ScrollView 
-              style={{ flex: 1 }} 
+            <ScrollView
+              style={{ flex: 1 }}
               contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
               keyboardShouldPersistTaps="handled"
             >
@@ -464,7 +480,8 @@ export default function MerShareAccountModal({ onClose }) {
                     <Text style={styles.accountUser}>{item.username}</Text>
                     <Text style={styles.accountDp} numberOfLines={1}>{item.dpName}</Text>
                   </View>
-                  <TouchableOpacity onPress={() => handleEdit(index)} style={{ marginRight: 12 }}>
+
+                  <TouchableOpacity onPress={() => handleEdit(index)} style={{ marginRight: 8 }}>
                     <Ionicons name="create-outline" size={20} color="#FF9800" />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => handleDelete(index)}>
@@ -508,6 +525,14 @@ export default function MerShareAccountModal({ onClose }) {
           onClose={() => setShowDpPicker(false)}
           insets={insets}
         />
+
+        {/* Account Dashboard Modal */}
+        {dashboardAccount && (
+          <AccountDashboardModal
+            account={dashboardAccount}
+            onClose={() => setDashboardAccount(null)}
+          />
+        )}
       </View>
     </KeyboardAvoidingView>
   );

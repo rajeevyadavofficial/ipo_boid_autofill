@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, ToastAndroid } from 'react-native';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+let GoogleSignin;
+if (Platform.OS !== 'web') {
+  GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+}
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useBoidSync } from '../hooks/useBoidSync';
 
 import { getApiBaseUrl } from '../utils/config';
+import { COLORS } from '../utils/theme';
 
-export default function GoogleSignIn({ onSignInSuccess }) {
+export default function GoogleSignIn({ onSignInSuccess, onSignOut, buttonText = 'Sign in with Google to backup accounts' }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { fullSync, syncing } = useBoidSync();
   
   const API_URL = getApiBaseUrl();
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     // Configure Google Sign-In
     GoogleSignin.configure({
       webClientId: '1029543580064-0tp9epc16rki3fdms3tl1kj8cg96u5h3.apps.googleusercontent.com',
@@ -28,7 +31,9 @@ export default function GoogleSignIn({ onSignInSuccess }) {
     try {
       const userData = await AsyncStorage.getItem('googleUser');
       if (userData) {
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        onSignInSuccess?.(parsedUser);
       }
     } catch (error) {
       console.error('Error checking sign-in status:', error);
@@ -36,6 +41,10 @@ export default function GoogleSignIn({ onSignInSuccess }) {
   };
 
   const handleSignIn = async () => {
+    if (Platform.OS === 'web') {
+      alert('Google Sign-In is only available on mobile devices.');
+      return;
+    }
     try {
       setLoading(true);
       
@@ -43,7 +52,7 @@ export default function GoogleSignIn({ onSignInSuccess }) {
       await GoogleSignin.hasPlayServices();
       
       // Sign in
-      const userInfo = await GoogleSignin.signIn();
+      await GoogleSignin.signIn();
       
       // Get ID token
       const tokens = await GoogleSignin.getTokens();
@@ -72,11 +81,9 @@ export default function GoogleSignIn({ onSignInSuccess }) {
       await AsyncStorage.setItem('googleUser', JSON.stringify(userData));
       setUser(userData);
 
-      // Perform full sync
-      const syncResult = await fullSync(userData.googleId);
-
+      // Account Manager handles the explicit backup action after sign-in
       if (onSignInSuccess) {
-        onSignInSuccess(userData, syncResult.boidList);
+        onSignInSuccess(userData);
       }
 
       console.log('✅ Signed in successfully');
@@ -91,22 +98,25 @@ export default function GoogleSignIn({ onSignInSuccess }) {
 
   const handleSignOut = async () => {
     try {
-      await GoogleSignin.signOut();
+      if (Platform.OS !== 'web') {
+        await GoogleSignin.signOut();
+      }
       await AsyncStorage.removeItem('googleUser');
       setUser(null);
+      if (onSignOut) {
+        onSignOut();
+      }
       console.log('✅ Signed out successfully');
     } catch (error) {
       console.error('Sign-out error:', error);
     }
   };
 
-  if (loading || syncing) {
+  if (loading) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="small" color="#4285F4" />
-        <Text style={styles.loadingText}>
-          {syncing ? 'Syncing BOIDs...' : 'Signing in...'}
-        </Text>
+        <Text style={styles.loadingText}>Signing in...</Text>
       </View>
     );
   }
@@ -139,7 +149,7 @@ export default function GoogleSignIn({ onSignInSuccess }) {
         source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
         style={styles.googleLogo}
       />
-      <Text style={styles.signInText}>Sign in with Google to backup BOIDs</Text>
+      <Text style={styles.signInText}>{buttonText}</Text>
     </TouchableOpacity>
   );
 }
@@ -150,22 +160,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     marginTop: 8,
   },
   loadingText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#5F6368',
+    color: COLORS.mutedText,
   },
   signInButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#DADCE0',
+    borderColor: COLORS.border,
     borderRadius: 8,
     padding: 12,
     marginTop: 8,
@@ -177,13 +187,13 @@ const styles = StyleSheet.create({
   },
   signInText: {
     fontSize: 14,
-    color: '#3C4043',
+    color: COLORS.text,
     fontWeight: '500',
   },
   userContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     padding: 12,
     marginTop: 8,
@@ -200,23 +210,23 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#202124',
+    color: COLORS.text,
   },
   userEmail: {
     fontSize: 12,
-    color: '#5F6368',
+    color: COLORS.mutedText,
     marginTop: 2,
   },
   signOutButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.primary,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#DADCE0',
+    borderColor: COLORS.border,
   },
   signOutText: {
     fontSize: 12,
-    color: '#5F6368',
+    color: COLORS.text,
   },
 });

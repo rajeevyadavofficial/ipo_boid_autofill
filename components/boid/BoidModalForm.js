@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import styles from '../../styles/styles';
+import { COLORS } from '../../utils/theme';
 
 export default function BoidModalForm({
   boidInput,
@@ -26,13 +27,14 @@ export default function BoidModalForm({
           maxLength={16}
           value={boidInput}
           onChangeText={setBoidInput}
+          placeholderTextColor={COLORS.mutedText}
         />
         <Text style={{ 
           position: 'absolute', 
           right: 15, 
           top: 15, 
           fontSize: 12, 
-          color: boidInput.length === 16 ? '#4CAF50' : '#888'
+          color: boidInput.length === 16 ? COLORS.text : COLORS.mutedText
         }}>
           {boidInput.length}/16
         </Text>
@@ -43,6 +45,7 @@ export default function BoidModalForm({
         placeholder="Enter Nickname (optional)"
         value={nicknameInput}
         onChangeText={setNicknameInput}
+        placeholderTextColor={COLORS.mutedText}
       />
       <TouchableOpacity style={styles.saveButton} onPress={saveOrUpdateBoid}>
         <Text style={styles.saveButtonText}>

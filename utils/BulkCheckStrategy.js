@@ -15,6 +15,17 @@ export const generateBulkCheckScript = (ipoName, boid) => {
   return `
 (async function checkIPOResult() {
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const bridgePost = (payload) => {
+    const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    if (window.__IPOBridgePost) {
+      return window.__IPOBridgePost(payload);
+    }
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(message);
+      return true;
+    }
+    throw new Error('ReactNative bridge unavailable');
+  };
   
   try {
     console.log('🔍 Starting IPO check for BOID: ${boid}');
@@ -118,27 +129,27 @@ export const generateBulkCheckScript = (ipoName, boid) => {
     console.log('✅ Result parsed:', isAllotted ? 'ALLOTTED' : 'NOT ALLOTTED');
     
     // Step 10: Send result back to React Native
-    window.ReactNativeWebView.postMessage(JSON.stringify({
+    bridgePost({
       type: 'BULK_CHECK_RESULT',
       boid: '${boid}',
       status: isAllotted ? 'allotted' : 'not-allotted',
       shares: shares,
       success: true,
       timestamp: new Date().toISOString()
-    }));
+    });
     
   } catch (error) {
     console.error('❌ Check failed:', error.message);
     
     // Send error back to React Native
-    window.ReactNativeWebView.postMessage(JSON.stringify({
+    bridgePost({
       type: 'BULK_CHECK_RESULT',
       boid: '${boid}',
       status: 'error',
       error: error.message,
       success: false,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 })();
 `;
@@ -199,6 +210,17 @@ export const generateCaptchaExtractionScript = (boid, shouldRefresh) => {
   return `
 (async function extractSurgical() {
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const bridgePost = (payload) => {
+    const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    if (window.__IPOBridgePost) {
+      return window.__IPOBridgePost(payload);
+    }
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(message);
+      return true;
+    }
+    throw new Error('ReactNative bridge unavailable');
+  };
   
   try {
     console.log('🔍 Surgical Extraction for BOID: ${boid} (Refresh: ${shouldRefresh})');
@@ -254,13 +276,13 @@ export const generateCaptchaExtractionScript = (boid, shouldRefresh) => {
     // Convert canvas to blob (more efficient than direct base64)
     canvas.toBlob((blob) => {
       if (!blob) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
+        bridgePost({
           type: 'BULK_CHECK_RESULT',
           boid: '${boid}',
           status: 'error',
           error: 'Failed to create blob from canvas',
           success: false
-        }));
+        });
         return;
       }
       
@@ -272,34 +294,34 @@ export const generateCaptchaExtractionScript = (boid, shouldRefresh) => {
       reader.onloadend = () => {
         const base64Data = reader.result.split(',')[1];
         
-        window.ReactNativeWebView.postMessage(JSON.stringify({
+        bridgePost({
           type: 'CAPTCHA_IMAGE_READY',
           boid: '${boid}',
           imageBase64: base64Data,
           imageSize: blob.size,
           mimeType: blob.type
-        }));
+        });
       };
       reader.onerror = () => {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
+        bridgePost({
           type: 'BULK_CHECK_RESULT',
           boid: '${boid}',
           status: 'error',
           error: 'Failed to read blob as base64',
           success: false
-        }));
+        });
       };
       reader.readAsDataURL(blob);
     }, 'image/png', 1.0);
 
   } catch (error) {
-    window.ReactNativeWebView.postMessage(JSON.stringify({
+    bridgePost({
       type: 'BULK_CHECK_RESULT',
       boid: '${boid}',
       status: 'error',
       error: 'Extraction: ' + error.message,
       success: false
-    }));
+    });
   }
 })();
 `;
@@ -312,6 +334,17 @@ export const generateFinalSubmissionScript = (boid, captchaText) => {
   return `
 (async function submitFinal() {
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const bridgePost = (payload) => {
+    const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    if (window.__IPOBridgePost) {
+      return window.__IPOBridgePost(payload);
+    }
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(message);
+      return true;
+    }
+    throw new Error('ReactNative bridge unavailable');
+  };
   
   try {
     console.log('📥 Submitting for BOID: ${boid}');
@@ -363,7 +396,7 @@ export const generateFinalSubmissionScript = (boid, captchaText) => {
       }
       
       console.log('✅ ALLOTTED:', result);
-      window.ReactNativeWebView.postMessage(JSON.stringify({
+      bridgePost({
         type: 'BULK_CHECK_RESULT',
         boid: '${boid}',
         status: status,
@@ -371,21 +404,21 @@ export const generateFinalSubmissionScript = (boid, captchaText) => {
         message: result,
         success: true,
         timestamp: new Date().toISOString()
-      }));
+      });
       return;
     } else if (body.includes("sorry")) {
       result = "❌ Sorry, not alloted for the entered BOID.";
       status = 'not-allotted';
       
       console.log('❌ NOT ALLOTTED:', result);
-      window.ReactNativeWebView.postMessage(JSON.stringify({
+      bridgePost({
         type: 'BULK_CHECK_RESULT',
         boid: '${boid}',
         status: status,
         message: result,
         success: true,
         timestamp: new Date().toISOString()
-      }));
+      });
       return;
     } else if (body.includes("invalid captcha") || body.includes("try again")) {
       console.log('🔄 CAPTCHA ERROR - Will retry');
@@ -398,13 +431,13 @@ export const generateFinalSubmissionScript = (boid, captchaText) => {
 
   } catch (error) {
     console.error('Submission error:', error.message);
-    window.ReactNativeWebView.postMessage(JSON.stringify({
+    bridgePost({
       type: 'BULK_CHECK_RESULT',
       boid: '${boid}',
       status: 'error',
       error: error.message,
       success: false
-    }));
+    });
   }
 })();
 `;

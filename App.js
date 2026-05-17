@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, StatusBar } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context'; 
 import * as SplashScreenModule from 'expo-splash-screen'; 
+import { StatusBar } from 'expo-status-bar';
 
 import MainApp from './screens/MainApp.js';
 import Toast from 'react-native-toast-message';
+import { COLORS } from './utils/theme';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenModule.preventAutoHideAsync();
@@ -21,7 +23,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#343a40" />
+        <StatusBar style="light" backgroundColor={COLORS.primary} translucent={false} />
         <MainApp />
         <Toast />
       </View>
@@ -32,6 +34,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.primary,
   },
 });

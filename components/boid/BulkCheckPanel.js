@@ -18,11 +18,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { 
-  generateCaptchaExtractionScript, 
+import {
+  generateCaptchaExtractionScript,
   generateFinalSubmissionScript,
   generateCompanySelectionScript,
-  reloadForFreshCaptcha, 
+  reloadForFreshCaptcha,
   fetchIPOsDirectly
 } from '../../utils/BulkCheckStrategy';
 import ViewShot, { captureRef } from 'react-native-view-shot';
@@ -31,23 +31,38 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getApiBaseUrl } from '../../utils/config';
+import { COLORS } from '../../utils/theme';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-export default function BulkCheckPanel({ 
-  savedBoids, 
-  ipoName, 
+const RESULT_COLORS = {
+  success: '#198754',
+  danger: '#dc3545',
+  warning: COLORS.accent,
+  muted: 'rgba(255,255,255,0.54)',
+};
+
+const RESULT_CARD_COLORS = {
+  success: '#198754',
+  danger: '#dc3545',
+  warning: '#5e6ea7',
+};
+
+export default function BulkCheckPanel({
+  savedBoids,
+  ipoName,
   webViewRef,
   visible,
   results,
   setResults,
   onModeChange,
-  onWebViewMessage, 
-  autoCheckBoid, 
+  onWebViewMessage,
+  autoCheckBoid,
   onAutoCheckComplete,
   useAiModel,
   setUseAiModel,
   onClose,
+  onOpenAccountManager,
 }) {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState('selection'); 
@@ -56,7 +71,7 @@ export default function BulkCheckPanel({
   // Prioritize prop state if available
   const isAiPropFunctional = typeof useAiModel === 'boolean' && setUseAiModel;
   const activeAiModel = isAiPropFunctional ? useAiModel : internalUseAiModel;
-  
+
   const toggleAiModel = () => {
     if (isAiPropFunctional) {
       setUseAiModel(!useAiModel);
@@ -79,8 +94,8 @@ export default function BulkCheckPanel({
   const [bulkCheckState, setBulkCheckState] = useState({
     progress: 0,
     currentIndex: 0,
-    currentCaptcha: null, 
-    currentCaptchaImage: null, 
+    currentCaptcha: null,
+    currentCaptchaImage: null,
     results: [],
     summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, captchaErrors: 0, skipped: 0, totalShares: 0 },
     currentCheckingNickname: '',
@@ -146,7 +161,7 @@ export default function BulkCheckPanel({
   // Handle individual auto-check request
   useEffect(() => {
     if (autoCheckBoid && viewMode === 'selection') {
-      console.log(`🚀 [Single] Individual auto-check triggered for: ${autoCheckBoid}`);
+      console.log(`[Single] Individual auto-check triggered for: ${autoCheckBoid}`);
       handleBulkCheck([autoCheckBoid]);
     }
   }, [autoCheckBoid]);
@@ -155,23 +170,22 @@ export default function BulkCheckPanel({
     // FIX: onPress passes an event object, so we must check if specificBoids is actually an array
     const isArray = Array.isArray(specificBoids);
     const targetBoids = isArray ? specificBoids : savedBoids;
-    
+
     if (targetBoids.length === 0) {
       alert('No BOIDs saved. Please add BOIDs first.');
       return;
     }
 
-    setViewMode('checking');
+    setViewMode('selection');
     setCapturedImageUri(null); // Clear previous image
 
     // Filter by enabled boids unless specificBoids is provided
-    const finalTargetBoids = isArray 
-      ? specificBoids 
+    const finalTargetBoids = isArray
+      ? specificBoids
       : targetBoids.filter(b => enabledBoids.get(b.boid));
 
     if (finalTargetBoids.length === 0) {
       alert('No accounts selected. Please enable at least one account.');
-      setViewMode('selection');
       return;
     }
 
@@ -198,17 +212,17 @@ export default function BulkCheckPanel({
       console.log(`[Bulk] Step 0: Auto-selecting company "${ipoName}"`);
       const selectionScript = generateCompanySelectionScript(ipoName);
       webViewRef.current?.injectJavaScript(selectionScript);
-      await sleep(2000); 
+      await sleep(2000);
     }
 
     for (let i = 0; i < finalTargetBoids.length; i++) {
       const boidObj = finalTargetBoids[i];
       const boidString = typeof boidObj === 'string' ? boidObj : boidObj.boid;
       // Clear previous captcha image when starting new BOID
-      setBulkCheckState(prev => ({ 
-        ...prev, 
-        currentIndex: i, 
-        progress: Math.round((i / targetBoids.length) * 100),
+      setBulkCheckState(prev => ({
+        ...prev,
+        currentIndex: i,
+        progress: Math.round((i / finalTargetBoids.length) * 100),
         currentCaptchaImage: null,
         currentCaptcha: null,
         currentCheckingNickname: boidObj?.nickname || 'Unknown',
@@ -225,20 +239,20 @@ export default function BulkCheckPanel({
           // STEP 1: Surgical Extraction (refresh captcha if NOT first attempt of first BOID)
           const isFirstEver = (i === 0 && attempts === 1);
           const shouldRefresh = !isFirstEver;
-          
+
           if (attempts > 1) {
             console.log(`[Bulk] 🔄 Retry Attempt ${attempts} for ${boidString}...`);
           }
-          
+
           console.log(`[Bulk] Step 1: Extracting Captcha for ${boidString} (Refresh: ${shouldRefresh})`);
           const extractScript = generateCaptchaExtractionScript(boidString, shouldRefresh);
           webViewRef.current?.injectJavaScript(extractScript);
 
           const extractionMsg = await waitForMessage('CAPTCHA_IMAGE_READY', boidString, 15000);
-          
+
           // Update UI with zoomed captcha image immediately
           setBulkCheckState(prev => ({ ...prev, currentCaptchaImage: extractionMsg.imageBase64 }));
-          
+
           let finalCaptcha = "";
           let solveSuccess = false;
 
@@ -263,14 +277,14 @@ export default function BulkCheckPanel({
               });
 
               const solveData = await solveResponse.json();
-              
+
               if (solveData.success && (solveData.status === 'completed' || solveData.captchaText)) {
-                console.log(`✅ [Bulk] Captcha solved directly: ${solveData.captchaText}`);
+                console.log(`[Bulk] Captcha solved directly: ${solveData.captchaText}`);
                 finalCaptcha = solveData.captchaText;
                 setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
                 if (finalCaptcha.length === 5) solveSuccess = true;
               } else if (solveData.success && solveData.jobId) {
-                console.log(`📡 [Bulk] Job ${solveData.jobId} queued. Polling...`);
+                console.log(`[Bulk] Job ${solveData.jobId} queued. Polling...`);
                 let pollAttempts = 0;
                 const MAX_POLL = 40; // Wait up to 80 seconds
                 while (pollAttempts < MAX_POLL) {
@@ -281,7 +295,7 @@ export default function BulkCheckPanel({
                     const stData = await stRes.json();
                     if (stData.status === 'completed' && stData.captchaText) {
                       finalCaptcha = stData.captchaText;
-                      console.log(`✅ [Bulk] Polling result for ${solveData.jobId}: ${finalCaptcha}`);
+                      console.log(`[Bulk] Polling result for ${solveData.jobId}: ${finalCaptcha}`);
                       setBulkCheckState(prev => ({ ...prev, currentCaptcha: finalCaptcha }));
                       if (finalCaptcha.length === 5) solveSuccess = true;
                       break;
@@ -289,12 +303,12 @@ export default function BulkCheckPanel({
                       throw new Error(stData.error || 'Job failed in worker');
                     }
                   } catch (pollErr) {
-                    console.warn(`⚠️ [Bulk] Poll Error (Attempt ${pollAttempts}): ${pollErr.message}`);
+                    console.warn(`[Bulk] Poll Error (Attempt ${pollAttempts}): ${pollErr.message}`);
                   }
                 }
               }
             } catch (err) {
-              console.warn(`⚠️ [Bulk] AI Solve failed: ${err.message}`);
+              console.warn(`[Bulk] AI Solve failed: ${err.message}`);
             }
           } else {
             console.log(`[Bulk] AI Model disabled. Skipping to manual entry...`);
@@ -303,16 +317,16 @@ export default function BulkCheckPanel({
           // --- MANUAL FALLBACK TRIGGER ---
           // If AI is off, or AI solve failed/looks invalid
           let needsManual = !activeAiModel || !solveSuccess || finalCaptcha.length !== 5;
-          
+
           if (needsManual) {
             // Automatic retry if AI solve just looked junk but we have attempts left
             if (activeAiModel && attempts < MAX_ATTEMPTS && !solveSuccess) {
-              console.log(`📡 [Bulk] AI solve junk. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
+              console.log(`[Bulk] AI solve junk. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
               await sleep(1000);
               continue;
             }
 
-            console.log(`📡 [Bulk] Triggering Manual Fallback...`);
+            console.log(`[Bulk] Triggering Manual Fallback...`);
             const manualCode = await new Promise((resolve) => {
               setManualPrompt({
                 visible: true,
@@ -323,10 +337,10 @@ export default function BulkCheckPanel({
                 error: attempts > 1 ? 'Incorrect captcha. Please try again.' : ''
               });
             });
-            
+
             if (manualCode) {
               finalCaptcha = manualCode;
-              console.log(`🧑‍💻 [Manual] User provided code: ${finalCaptcha}`);
+              console.log(`[Manual] User provided code: ${finalCaptcha}`);
             } else {
               // Mark as skipped instead of error
               handleResult({
@@ -346,22 +360,22 @@ export default function BulkCheckPanel({
           webViewRef.current?.injectJavaScript(submitScript);
 
           const resultMsg = await waitForMessage('BULK_CHECK_RESULT', boidString, 20000);
-          console.log(`[Bulk] 📩 Result received for ${boidString}:`, JSON.stringify(resultMsg));
-          
+          console.log(`[Bulk] Result received for ${boidString}:`, JSON.stringify(resultMsg));
+
           // Check for captcha-specific errors from the site
           const lowerError = (resultMsg.error || '').toLowerCase();
           const isCaptchaError = resultMsg.status === 'error' && (
-            lowerError.includes('captcha') || 
-            lowerError.includes('try again') || 
+            lowerError.includes('captcha') ||
+            lowerError.includes('try again') ||
             lowerError.includes('incorrect')
           );
 
           if (isCaptchaError) {
              if (attempts < MAX_ATTEMPTS) {
-                console.log(`⚠️ [Bulk] Captcha error detected. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
-                continue; 
+                console.log(`[Bulk] Captcha error detected. Retrying ${attempts}/${MAX_ATTEMPTS}...`);
+                continue;
              } else {
-                console.log(`📡 [Bulk] 3 failures reached. Switching to Manual Fallback for current BOID...`);
+                console.log(`[Bulk] 3 failures reached. Switching to Manual Fallback for current BOID...`);
                 const manualCode = await new Promise((resolve) => {
                   setManualPrompt({
                     visible: true,
@@ -372,9 +386,9 @@ export default function BulkCheckPanel({
                     error: 'Incorrect captcha. Please try again.'
                   });
                 });
-                
+
                 if (manualCode) {
-                  console.log(`🧑‍💻 [Manual] User provided code after 3 attempts: ${manualCode}`);
+                  console.log(`[Manual] User provided code after 3 attempts: ${manualCode}`);
                   const subScript = generateFinalSubmissionScript(boidString, manualCode);
                   webViewRef.current?.injectJavaScript(subScript);
                   const manualResult = await waitForMessage('BULK_CHECK_RESULT', boidString, 20000);
@@ -411,7 +425,7 @@ export default function BulkCheckPanel({
       }
 
       // Pacing delay (respecting rate limits)
-      if (i < targetBoids.length - 1) {
+      if (i < finalTargetBoids.length - 1) {
         const delay = 1000;
         await sleep(delay);
       }
@@ -419,7 +433,7 @@ export default function BulkCheckPanel({
 
     setBulkCheckState(prev => ({ ...prev, progress: 100, currentCheckingBoid: '', currentCheckingNickname: '' }));
     if (onAutoCheckComplete) onAutoCheckComplete();
-    
+
     // AUTO-GENERATE SHARE CARD AFTER FINISHING
     setTimeout(async () => {
       try {
@@ -428,17 +442,15 @@ export default function BulkCheckPanel({
           await sleep(500);
           if (!viewShotRef.current) throw new Error('ViewShot ref still null');
         }
-        
+
         const uri = await captureRef(viewShotRef, {
           format: 'png',
           quality: 0.9,
         });
         setCapturedImageUri(uri);
-        setViewMode('results');
-        setShowPreviewModal(true); // Open popup automatically
+        setShowPreviewModal(false);
       } catch (captureErr) {
         console.error('Capture error:', captureErr);
-        setViewMode('results'); 
       }
     }, 1000);
   };
@@ -528,7 +540,7 @@ export default function BulkCheckPanel({
   const handleSaveToLibrary = async () => {
     try {
       if (!capturedImageUri) return;
-      
+
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Toast.show({
@@ -560,6 +572,21 @@ export default function BulkCheckPanel({
     return boid.substring(0, 6) + '********' + boid.substring(14);
   };
 
+  const resetBulkCheckState = () => {
+    setBulkCheckState({
+      progress: 0,
+      currentIndex: 0,
+      currentCaptcha: null,
+      currentCaptchaImage: null,
+      results: [],
+      summary: { total: 0, allotted: 0, notAllotted: 0, errors: 0, captchaErrors: 0, skipped: 0, totalShares: 0 },
+      currentCheckingNickname: '',
+      currentCheckingBoid: '',
+    });
+    setCapturedImageUri(null);
+    setShowPreviewModal(false);
+  };
+
   const handleResult = (data) => {
     const matchingBoid = savedBoids.find(b => b.boid === data.boid);
     const nickname = matchingBoid?.nickname || data.nickname || 'Unknown';
@@ -587,7 +614,7 @@ export default function BulkCheckPanel({
       } else {
         newResults = [...prev.results, resultItem];
       }
-      
+
       // Detailed Summary Counts
       const allotted = newResults.filter(r => r.status === 'allotted').length;
       const notAllotted = newResults.filter(r => r.status === 'not-allotted').length;
@@ -620,19 +647,19 @@ export default function BulkCheckPanel({
 
     // Update parent global results for the list labels
     if (setResults && data.status !== 'error') {
-      const resultText = data.status === 'allotted' 
-        ? `🎉 Congratulations Alloted!!! Alloted quantity : ${data.shares}` 
-        : `❌ Sorry, not alloted for the entered BOID.`;
+      const resultText = data.status === 'allotted'
+        ? `Congratulations Alloted!!! Alloted quantity : ${data.shares}`
+        : `Sorry, not alloted for the entered BOID.`;
 
       setResults((prevResults) => {
         const index = prevResults.findIndex((item) => item.boid === data.boid);
-        
+
         if (index >= 0) {
           const updated = [...prevResults];
           updated[index].result = resultText;
           return updated;
         }
-        
+
         return [
           ...prevResults,
           {
@@ -652,182 +679,334 @@ export default function BulkCheckPanel({
   const getStatusIcon = (status) => {
     switch (status) {
       case 'allotted':
-        return <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />;
+        return <Ionicons name="checkmark-circle" size={20} color={RESULT_COLORS.success} />;
       case 'not-allotted':
-        return <Ionicons name="close-circle" size={20} color="#F44336" />;
+        return <Ionicons name="close-circle" size={20} color={RESULT_COLORS.danger} />;
       case 'skipped':
-        return <Ionicons name="play-skip-forward-circle" size={20} color="#9E9E9E" />;
+        return <Ionicons name="play-skip-forward-circle" size={20} color={RESULT_COLORS.muted} />;
       case 'captcha-error':
-        return <Ionicons name="alert-circle" size={20} color="#FF9800" />;
+        return <Ionicons name="alert-circle" size={20} color={RESULT_COLORS.warning} />;
       case 'error':
-        return <Ionicons name="alert-circle" size={20} color="#FF9800" />;
+        return <Ionicons name="alert-circle" size={20} color={RESULT_COLORS.warning} />;
       default:
-        return <ActivityIndicator size="small" color="#6200EE" />;
+        return <ActivityIndicator size="small" color={COLORS.accent} />;
     }
   };
+
+  const getBoidStatusMeta = (boid) => {
+    const entry = bulkCheckState.results.find((item) => item.boid === boid);
+    const isCurrent = bulkCheckState.currentCheckingBoid === boid;
+
+    if (isCurrent) {
+      return { label: 'Checking', tone: 'active' };
+    }
+
+    if (!entry) {
+      return { label: 'Idle', tone: 'idle' };
+    }
+
+    switch (entry.status) {
+      case 'pending':
+        return { label: 'Queued', tone: 'idle' };
+      case 'allotted':
+        return { label: entry.shares ? `Allotted ${entry.shares}` : 'Allotted', tone: 'success' };
+      case 'not-allotted':
+        return { label: 'Not Allotted', tone: 'danger' };
+      case 'skipped':
+        return { label: 'Skipped', tone: 'muted' };
+      case 'captcha-error':
+        return { label: 'Captcha Error', tone: 'warning' };
+      case 'error':
+        return { label: 'Error', tone: 'warning' };
+      default:
+        return { label: 'Idle', tone: 'idle' };
+    }
+  };
+
+  const isCheckingActive = !!bulkCheckState.currentCheckingBoid;
+  const hasCheckResults = bulkCheckState.results.length > 0;
+  const isCheckComplete = hasCheckResults && !isCheckingActive && bulkCheckState.results.every(item => item.status !== 'pending');
+  const isBulkCheckRunning = hasCheckResults && !isCheckComplete;
 
 
   return (
     <View style={panelStyles.container}>
-      {/* Header bar — shown when used as full-screen modal */}
-      {onClose && (
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: '#333a56',
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-          paddingTop: insets.top + 8,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="hardware-chip" size={22} color="#FFD700" />
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 }}>Bulk Check</Text>
+
+      {/* Header bar — MeroShare Dark Blue */}
+      <View style={[panelStyles.headerShell, { paddingTop: insets.top + 10 }]}>
+        <View style={panelStyles.headerRow}>
+          <View style={panelStyles.headerTitleWrap}>
+            <View>
+              <Text style={panelStyles.headerTitle}>Bulk Check</Text>
+            </View>
           </View>
-          <TouchableOpacity
-            onPress={onClose}
-            style={{ padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }}
-          >
-            <Ionicons name="close" size={22} color="#fff" />
-          </TouchableOpacity>
+          {onClose && viewMode === 'selection' && (
+            <TouchableOpacity
+              onPress={onClose}
+              style={panelStyles.headerCloseButton}
+            >
+              <Ionicons name="close" size={20} color={COLORS.text} />
+            </TouchableOpacity>
+          )}
         </View>
-      )}
+      </View>
 
        {/* 1. SELECTION MODE: User selects company and accounts */}
        {viewMode === 'selection' && (
-         <View style={{ flex: 1 }}>
-           <View style={{ paddingHorizontal: 15, paddingTop: 10 }}>
+         <ScrollView
+           style={{ flex: 1 }}
+           contentContainerStyle={{ paddingBottom: 28, flexGrow: 1 }}
+           showsVerticalScrollIndicator={false}
+           keyboardShouldPersistTaps="handled"
+         >
+           <View style={panelStyles.selectionTop}>
               {ipoName && (
-                <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 10, marginBottom: 0, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
-                  <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>SELECTED COMPANY</Text>
-                  <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                <View style={panelStyles.companyBanner}>
+                  <Text style={panelStyles.companyBannerLabel}>Selected IPO</Text>
+                  <Text style={panelStyles.companyBannerTitle}>{ipoName}</Text>
                 </View>
               )}
            </View>
            <View style={panelStyles.selectionView}>
-            <View style={panelStyles.instructionContainer}>
-              <Ionicons name="information-circle-outline" size={20} color="#6200EE" />
-              <Text style={panelStyles.instructionText}>
-                Select <Text style={panelStyles.bold}>IPO Company</Text> in the website above, then choose accounts to check.
-              </Text>
-            </View>
 
-            {/* AI Toggle */}
-            <TouchableOpacity 
+            {/* Auto Check Toggle — MeroShare Colors */}
+            <TouchableOpacity
               onPress={toggleAiModel}
-              style={{ 
-                backgroundColor: activeAiModel ? '#F3E5F5' : '#F5F5F5', 
-                marginHorizontal: 0, 
-                padding: 12, 
-                borderRadius: 12, 
-                marginBottom: 0,
-                borderWidth: 1,
-                borderColor: activeAiModel ? '#E1BEE7' : '#E0E0E0'
-              }}
+              style={[
+                panelStyles.modeCard,
+                activeAiModel ? panelStyles.modeCardActive : panelStyles.modeCardInactive,
+              ]}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="hardware-chip-outline" size={20} color={activeAiModel ? "#6A1B9A" : "#757575"} />
-                  <Text style={{ fontWeight: 'bold', color: activeAiModel ? '#4A148C' : '#616161', marginLeft: 8 }}>
-                    Auto Bulk Check
+              <View style={panelStyles.modeCardTop}>
+                <View style={panelStyles.modeCardCopy}>
+                  <Text style={panelStyles.modeCardEyebrow}>Captcha</Text>
+                  <Text style={[panelStyles.modeCardTitle, activeAiModel && panelStyles.modeCardTitleActive]}>
+                    {activeAiModel ? 'Auto Bulk Check' : 'Manual Check'}
                   </Text>
                 </View>
-                <View 
-                  style={{ 
-                    width: 46, 
-                    height: 24, 
-                    backgroundColor: activeAiModel ? '#6A1B9A' : '#BDBDBD', 
-                    borderRadius: 12, 
-                    padding: 2,
-                    justifyContent: 'center',
-                    alignItems: activeAiModel ? 'flex-end' : 'flex-start'
-                  }}
-                >
-                  <View style={{ width: 20, height: 20, backgroundColor: 'white', borderRadius: 10, elevation: 2 }} />
+                <View style={[panelStyles.switchTrack, activeAiModel && panelStyles.switchTrackActive]}>
+                  <View style={[panelStyles.switchThumb, activeAiModel && panelStyles.switchThumbActive]} />
                 </View>
               </View>
             </TouchableOpacity>
+            <Text style={panelStyles.accountManagerHint}>
+              You can add BOIDs from Account Manager.
+            </Text>
           </View>
 
           {/* Account Selection List */}
-          <ScrollView 
-            style={{ flex: 1 }} 
-            contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={{ marginBottom: 10, marginLeft: 5 }}>
-              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333' }}>
-                Accounts ({savedBoids.length})
-              </Text>
-              <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
-                Check to include or uncheck to skip an account.
-              </Text>
+          <View style={{ paddingHorizontal: 16 }}>
+            <View style={panelStyles.accountsPremiumHeader}>
+              <View>
+                <Text style={panelStyles.accountsPremiumTitle}>BOID Cards</Text>
+                <Text style={panelStyles.accountsPremiumSubtitle}>
+                  {isBulkCheckRunning
+                    ? `${bulkCheckState.summary.total || 0} accounts in progress`
+                    : isCheckComplete
+                      ? `${bulkCheckState.summary.total || 0} accounts checked`
+                      : `${savedBoids.length} saved accounts`}
+                </Text>
+              </View>
+              {hasCheckResults && (
+                <View style={panelStyles.resultMiniStats}>
+                  <View style={[panelStyles.resultMiniPill, panelStyles.resultMiniPillSuccess]}>
+                    <Text style={panelStyles.resultMiniValue}>{bulkCheckState.summary.allotted}</Text>
+                  </View>
+                  <View style={[panelStyles.resultMiniPill, panelStyles.resultMiniPillDanger]}>
+                    <Text style={panelStyles.resultMiniValue}>{bulkCheckState.summary.notAllotted}</Text>
+                  </View>
+                </View>
+              )}
             </View>
+            {false && <View style={panelStyles.accountsHeader}>
+              {onOpenAccountManager && (
+                <TouchableOpacity
+                  onPress={onOpenAccountManager}
+                  style={panelStyles.addAccountButton}
+                >
+                  <Text style={panelStyles.addAccountButtonText}>Add BOID</Text>
+                </TouchableOpacity>
+              )}
+            </View>}
+            {false && savedBoids.length > 0 && (
+              <View style={panelStyles.selectionToolsRow}>
+                <TouchableOpacity
+                  style={panelStyles.selectionToolButton}
+                  onPress={() => {
+                    const next = new Map(savedBoids.map(b => [b.boid, true]));
+                    setEnabledBoids(next);
+                  }}
+                >
+                  <Text style={panelStyles.selectionToolText}>Select All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={panelStyles.selectionToolButton}
+                  onPress={() => {
+                    const next = new Map(savedBoids.map(b => [b.boid, false]));
+                    setEnabledBoids(next);
+                  }}
+                >
+                  <Text style={panelStyles.selectionToolText}>Clear All</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {savedBoids.length === 0 && (
+              <View style={panelStyles.emptyAccountsCard}>
+                <Text style={panelStyles.emptyAccountsTitle}>No BOIDs added yet</Text>
+                <Text style={panelStyles.emptyAccountsText}>
+                  You can add BOIDs from Account Manager.
+                </Text>
+              </View>
+            )}
             {savedBoids.map((item, index) => {
               const isEnabled = enabledBoids.get(item.boid);
+              const statusMeta = getBoidStatusMeta(item.boid);
+              const isResultTone = ['success', 'danger', 'warning'].includes(statusMeta.tone);
+              const isActiveTone = statusMeta.tone === 'active';
+              const statusIconName =
+                statusMeta.tone === 'success' ? 'checkmark' :
+                statusMeta.tone === 'danger' ? 'close' :
+                statusMeta.tone === 'warning' ? 'alert' :
+                statusMeta.tone === 'active' ? 'sync' :
+                statusMeta.tone === 'muted' ? 'remove' :
+                'person';
+              const cardForeground = isResultTone || isActiveTone ? COLORS.text : COLORS.text;
+              const cardMutedText = isResultTone || isActiveTone ? 'rgba(255,255,255,0.82)' : COLORS.mutedText;
               return (
-                <View key={index} style={[localStyles.accountCard, !isEnabled && { opacity: 0.6 }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={localStyles.accountNickname}>{item.nickname || 'Unknown'}</Text>
-                    <Text style={localStyles.accountBoid}>{maskBoid(item.boid)}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    {/* Individual AI Check */}
-                    <TouchableOpacity 
-                      onPress={() => handleBulkCheck([item])}
-                      style={[localStyles.iconBtn, { backgroundColor: '#E1BEE7' }]}
-                    >
-                      <Ionicons name="hardware-chip" size={18} color="#6A1B9A" />
-                      <Text style={{ fontSize: 10, color: '#6A1B9A', fontWeight: 'bold', marginLeft: 4 }}>AI</Text>
-                    </TouchableOpacity>
-
-                    {/* Toggle */}
-                    <TouchableOpacity 
-                      onPress={() => toggleBoid(item.boid)}
-                      style={[localStyles.iconBtn, { backgroundColor: isEnabled ? '#E8F5E9' : '#FFEBEE' }]}
-                    >
-                      <Ionicons 
-                        name={isEnabled ? "checkbox" : "square-outline"} 
-                        size={20} 
-                        color={isEnabled ? "#2E7D32" : "#C62828"} 
+                <View
+                  key={index}
+                  style={[
+                    localStyles.accountCard,
+                    !isEnabled && !isBulkCheckRunning && !hasCheckResults && panelStyles.accountCardMuted,
+                    statusMeta.tone === 'success' && panelStyles.accountCardSuccess,
+                    statusMeta.tone === 'danger' && panelStyles.accountCardDanger,
+                    statusMeta.tone === 'warning' && panelStyles.accountCardWarning,
+                    statusMeta.tone === 'active' && panelStyles.accountCardActive,
+                  ]}
+                >
+                  <View style={[
+                    panelStyles.statusOrb,
+                    statusMeta.tone === 'success' && panelStyles.statusOrbSuccess,
+                    statusMeta.tone === 'danger' && panelStyles.statusOrbDanger,
+                    statusMeta.tone === 'warning' && panelStyles.statusOrbWarning,
+                    statusMeta.tone === 'active' && panelStyles.statusOrbActive,
+                    statusMeta.tone === 'muted' && panelStyles.statusOrbMuted,
+                  ]}>
+                    {isActiveTone ? (
+                      <ActivityIndicator size="small" color={COLORS.text} />
+                    ) : (
+                      <Ionicons
+                        name={statusIconName}
+                        size={18}
+                        color={isResultTone || isActiveTone ? COLORS.text : COLORS.accent}
                       />
-                    </TouchableOpacity>
+                    )}
                   </View>
+                  <View style={panelStyles.accountIdentity}>
+                    <View style={{ flex: 1 }}>
+                      <View style={panelStyles.cardTopRow}>
+                        <Text style={[localStyles.accountNickname, { color: cardForeground }]}>{item.nickname || 'Unknown'}</Text>
+                        <View style={[
+                          panelStyles.inlineStatusPill,
+                          statusMeta.tone === 'success' && panelStyles.inlineStatusSuccess,
+                          statusMeta.tone === 'danger' && panelStyles.inlineStatusDanger,
+                          statusMeta.tone === 'warning' && panelStyles.inlineStatusWarning,
+                          statusMeta.tone === 'active' && panelStyles.inlineStatusActive,
+                          statusMeta.tone === 'muted' && panelStyles.inlineStatusMuted,
+                        ]}>
+                          <Text style={[
+                            panelStyles.inlineStatusText,
+                            statusMeta.tone === 'success' && panelStyles.inlineStatusTextSuccess,
+                            statusMeta.tone === 'danger' && panelStyles.inlineStatusTextDanger,
+                            statusMeta.tone === 'warning' && panelStyles.inlineStatusTextWarning,
+                            statusMeta.tone === 'active' && panelStyles.inlineStatusTextActive,
+                            statusMeta.tone === 'muted' && panelStyles.inlineStatusTextMuted,
+                          ]}>
+                            {statusMeta.label}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[localStyles.accountBoid, { color: cardMutedText }]}>{maskBoid(item.boid)}</Text>
+                      {isActiveTone && (
+                        <View style={panelStyles.cardProgressTrack}>
+                          <View style={[panelStyles.cardProgressFill, { width: `${Math.max(8, bulkCheckState.progress)}%` }]} />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  {!isBulkCheckRunning && !hasCheckResults && (
+                    <View style={panelStyles.accountActions}>
+                      <TouchableOpacity
+                        onPress={() => handleBulkCheck([item])}
+                        style={panelStyles.quickCheckButton}
+                      >
+                        <Text style={panelStyles.quickCheckButtonText}>Check</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => toggleBoid(item.boid)}
+                        style={[
+                          panelStyles.selectionToggleSwitch,
+                          isEnabled ? panelStyles.selectionToggleEnabled : panelStyles.selectionToggleDisabled,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            panelStyles.selectionToggleThumb,
+                            isEnabled && panelStyles.selectionToggleThumbEnabled,
+                          ]}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })}
-          </ScrollView>
+          </View>
 
           {/* Start Button */}
-          <View style={{ padding: 15, paddingBottom: 60, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
-            <TouchableOpacity  
-              style={panelStyles.bulkCheckButton}
-              onPress={() => handleBulkCheck()}
-            >
-              <Ionicons name="play" size={24} color="white" />
-              <Text style={panelStyles.bulkCheckText}>
-                START BULK CHECK ({Array.from(enabledBoids.values()).filter(v => v).length})
+          <View style={[panelStyles.startFooter, panelStyles.startFooterInline]}>
+            <View style={panelStyles.startFooterSummary}>
+              <Text style={panelStyles.startFooterTitle}>
+                {isBulkCheckRunning ? `Checking ${bulkCheckState.currentIndex + 1}/${bulkCheckState.summary.total || 0}` : isCheckComplete ? 'Check complete' : 'Ready to run'}
               </Text>
-            </TouchableOpacity>
+            </View>
+            {isCheckComplete ? (
+              <TouchableOpacity
+                style={panelStyles.bulkCheckButton}
+                onPress={resetBulkCheckState}
+              >
+                <Text style={panelStyles.bulkCheckText}>Done</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  panelStyles.bulkCheckButton,
+                  (savedBoids.length === 0 || Array.from(enabledBoids.values()).filter(v => v).length === 0 || isBulkCheckRunning) && panelStyles.bulkCheckButtonDisabled,
+                ]}
+                onPress={() => handleBulkCheck()}
+                disabled={savedBoids.length === 0 || Array.from(enabledBoids.values()).filter(v => v).length === 0 || isBulkCheckRunning}
+              >
+                <Text style={panelStyles.bulkCheckText}>
+                  {isBulkCheckRunning
+                    ? `Checking ${Math.round(bulkCheckState.progress)}%`
+                    : `Start Bulk Check (${Array.from(enabledBoids.values()).filter(v => v).length})`}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
+        </ScrollView>
       )}
 
-      {/* 2. FULL SCREEN MODAL for CHECKING & RESULTS */}
-      <Modal 
-        visible={viewMode === 'checking' || viewMode === 'results'} 
-        animationType="slide"
-        onRequestClose={() => {
-            if (viewMode === 'results') setViewMode('selection');
-        }}
-      >
-        <View style={[panelStyles.fsContainer, { paddingTop: insets.top }]}>
+      {/* 2. CHECKING & RESULTS VIEW (Inline) */}
+      {false && (<>
+        <View style={panelStyles.inlineStageContainer}>
           {/* HIDDEN BRANDED SHARE CARD FOR VIEWSHOT - MOVED OUTSIDE CONDITIONAL TO PREVENT HANGS */}
           <View style={{ position: 'absolute', opacity: 0, left: -5000 }}>
             <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }}>
               <View style={panelStyles.shareCard}>
                 <LinearGradient
-                  colors={['#6200EE', '#4A148C']}
+                  colors={[COLORS.primary, COLORS.accent]}
                   style={panelStyles.shareCardHeader}
                 >
                   <Image source={require('../../assets/icon.png')} style={panelStyles.shareLogo} />
@@ -839,36 +1018,36 @@ export default function BulkCheckPanel({
 
                 <View style={panelStyles.shareCardBody}>
                   {ipoName && (
-                    <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 8, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
-                      <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 0.5 }}>COMPANY</Text>
-                      <Text style={{ fontSize: 13, color: '#1F2937', fontWeight: 'bold' }} numberOfLines={1}>{ipoName}</Text>
+                    <View style={{ backgroundColor: COLORS.primary, padding: 8, borderRadius: 8, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: COLORS.accent }}>
+                      <Text style={{ fontSize: 8, color: COLORS.mutedText, fontWeight: '900', letterSpacing: 0.5 }}>COMPANY</Text>
+                      <Text style={{ fontSize: 13, color: COLORS.text, fontWeight: 'bold' }} numberOfLines={1}>{ipoName}</Text>
                     </View>
                   )}
                   <Text style={panelStyles.shareCardTitle}>IPO Allotment Status</Text>
                   <View style={panelStyles.summaryGridSmall}>
                     <View style={panelStyles.shareSumItem}>
-                      <Text style={[panelStyles.shareSumCount, { color: '#10B981' }]}>{bulkCheckState.summary.allotted}</Text>
+                      <Text style={[panelStyles.shareSumCount, { color: RESULT_COLORS.success }]}>{bulkCheckState.summary.allotted}</Text>
                       <Text style={panelStyles.shareSumLabel}>Allotted</Text>
                     </View>
                     <View style={panelStyles.shareSumItem}>
-                      <Text style={[panelStyles.shareSumCount, { color: '#6B7280' }]}>{bulkCheckState.summary.total}</Text>
+                      <Text style={[panelStyles.shareSumCount, { color: COLORS.mutedText }]}>{bulkCheckState.summary.total}</Text>
                       <Text style={panelStyles.shareSumLabel}>Total Checked</Text>
                     </View>
                   </View>
 
                       {/* Summary Emotive Message */}
                       <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                        <Text style={{ 
-                          fontSize: 24, 
-                          fontWeight: 'bold', 
-                          color: bulkCheckState.summary.allotted > 0 ? '#059669' : '#DC2626',
+                        <Text style={{
+                          fontSize: 24,
+                          fontWeight: 'bold',
+                          color: bulkCheckState.summary.allotted > 0 ? RESULT_COLORS.success : RESULT_COLORS.danger,
                           textAlign: 'center'
                         }}>
                           {bulkCheckState.summary.allotted > 0 ? "Congratulations! 🎉" : "Better luck next time! 🍀"}
                         </Text>
-                        <Text style={{ color: '#6B7280', fontSize: 13, marginTop: 4 }}>
-                          {bulkCheckState.summary.allotted > 0 
-                            ? `You got allotted in ${bulkCheckState.summary.allotted} account(s)!` 
+                        <Text style={{ color: COLORS.mutedText, fontSize: 13, marginTop: 4 }}>
+                          {bulkCheckState.summary.allotted > 0
+                            ? `You got allotted in ${bulkCheckState.summary.allotted} account(s)!`
                             : "No allotment found in any of the accounts."}
                         </Text>
                       </View>
@@ -878,21 +1057,21 @@ export default function BulkCheckPanel({
                         const isAllotted = item.status === 'allotted';
                         const isSkipped = item.status === 'skipped';
                         const isError = item.status === 'error' || item.status === 'captcha-error';
-                        
-                        let statusColor = '#EF4444'; // default red
-                        if (isAllotted) statusColor = '#10B981';
-                        if (isSkipped) statusColor = '#9E9E9E';
-                        if (item.status === 'captcha-error') statusColor = '#FF9800';
 
-                        let statusLabel = 'Not Allotted';
-                        if (isAllotted) statusLabel = `Allotted: ${item.shares} Units`;
-                        if (isSkipped) statusLabel = 'Skipped';
-                        if (item.status === 'captcha-error') statusLabel = 'Captcha Error';
+                        let statusColor = RESULT_COLORS.danger; // default red
+                        if (isAllotted) statusColor = RESULT_COLORS.success;
+                        if (isSkipped) statusColor = RESULT_COLORS.muted;
+                        if (item.status === 'captcha-error') statusColor = RESULT_COLORS.warning;
+
+                        let statusLabel = 'NOT ALLOTTED';
+                        if (isAllotted) statusLabel = `ALLOTTED: ${item.shares} UNITS` ;
+                        if (isSkipped) statusLabel = 'SKIPPED';
+                        if (item.status === 'captcha-error') statusLabel = 'CAPTCHA ERROR';
 
                         return (
-                          <View key={idx} style={[panelStyles.resultCard, { marginBottom: 8, elevation: 0, borderWidth: 1, borderColor: '#F3F4F6' }]}>
+                          <View key={idx} style={[panelStyles.resultCard, { marginBottom: 8, elevation: 0, borderWidth: 1, borderColor: COLORS.primary }]}>
                             <View style={[
-                              panelStyles.resultCardIndicator, 
+                              panelStyles.resultCardIndicator,
                               { backgroundColor: statusColor }
                             ]} />
                             <View style={[panelStyles.resultCardContent, { padding: 8 }]}>
@@ -905,10 +1084,10 @@ export default function BulkCheckPanel({
                                   panelStyles.resultBadge,
                                   { paddingHorizontal: 6, paddingVertical: 2, backgroundColor: statusColor + '10' }
                                 ]}>
-                                  <Ionicons 
-                                    name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")} 
-                                    size={10} 
-                                    color={statusColor} 
+                                  <Ionicons
+                                    name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")}
+                                    size={10}
+                                    color={statusColor}
                                   />
                                   <Text style={[
                                     panelStyles.resultBadgeText,
@@ -934,24 +1113,24 @@ export default function BulkCheckPanel({
             </ViewShot>
           </View>
 
-           <View style={panelStyles.fsHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={panelStyles.fsTitle}>
-                  {viewMode === 'checking' ? 'Processing accounts...' : 'Check Complete!'}
-                </Text>
-              </View>
-              {viewMode === 'results' && (
-                <TouchableOpacity onPress={() => setViewMode('selection')}>
-                  <Ionicons name="close" size={24} color="#333" />
-                </TouchableOpacity>
-              )}
+           <View style={panelStyles.inlineStageHeader}>
+             <View style={{ flex: 1 }}>
+               <Text style={panelStyles.inlineStageTitle}>
+                 {viewMode === 'checking' ? 'Checking in progress' : 'Bulk Check Complete'}
+               </Text>
+             </View>
+             {viewMode === 'results' && (
+               <TouchableOpacity onPress={() => setViewMode('selection')} style={panelStyles.inlineStageClose}>
+                 <Ionicons name="close" size={22} color={COLORS.text} />
+               </TouchableOpacity>
+             )}
            </View>
 
-           <View style={{ paddingHorizontal: 20, paddingTop: 15 }}>
+           <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
               {ipoName && (
-                <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 10, marginBottom: 5, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
-                  <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>IPO COMPANY</Text>
-                  <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                <View style={panelStyles.companyBannerCompact}>
+                  <Text style={panelStyles.companyBannerLabel}>IPO Company</Text>
+                  <Text style={panelStyles.companyBannerTitle}>{ipoName}</Text>
                 </View>
               )}
            </View>
@@ -970,42 +1149,42 @@ export default function BulkCheckPanel({
                     <Text style={panelStyles.fsStatusText}>
                       Processing {bulkCheckState.currentIndex + 1} of {bulkCheckState.summary.total}
                     </Text>
-                    <Text style={[panelStyles.fsNickname, { color: '#6200EE' }]}>
+                    <Text style={[panelStyles.fsNickname, { color: COLORS.accent }]}>
                       {bulkCheckState.currentCheckingNickname || bulkCheckState.currentCheckingBoid || 'Starting...'}
                     </Text>
                   </View>
-                  <View style={{ alignItems: 'flex-end', backgroundColor: '#F3E8FF', padding: 8, borderRadius: 10 }}>
-                     <Text style={{ fontSize: 18, fontWeight: '900', color: '#6200EE' }}>
+                  <View style={{ alignItems: 'flex-end', backgroundColor: COLORS.surface, padding: 8, borderRadius: 10 }}>
+                     <Text style={{ fontSize: 18, fontWeight: '900', color: COLORS.accent }}>
                        {Math.round(bulkCheckState.progress)}%
                      </Text>
-                     <Text style={{ fontSize: 8, color: '#6200EE', fontWeight: 'bold' }}>COMPLETED</Text>
+                     <Text style={{ fontSize: 8, color: COLORS.accent, fontWeight: 'bold' }}>COMPLETED</Text>
                   </View>
                 </View>
 
                 {/* Summary Mini Grid during progress */}
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 15, width: '100%' }}>
-                  <View style={{ flex: 1, backgroundColor: '#ECFDF5', padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#10B98120' }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#10B981' }}>{bulkCheckState.summary.allotted}</Text>
-                    <Text style={{ fontSize: 8, color: '#10B981', fontWeight: 'bold' }}>ALLOTTED</Text>
+                  <View style={{ flex: 1, backgroundColor: COLORS.surface, padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: RESULT_COLORS.success }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: RESULT_COLORS.success }}>{bulkCheckState.summary.allotted}</Text>
+                    <Text style={{ fontSize: 8, color: RESULT_COLORS.success, fontWeight: 'bold' }}>ALLOTTED</Text>
                   </View>
-                  <View style={{ flex: 1, backgroundColor: '#FEF2F2', padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#EF444420' }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#EF4444' }}>{bulkCheckState.summary.notAllotted}</Text>
-                    <Text style={{ fontSize: 8, color: '#EF4444', fontWeight: 'bold' }}>NOT ALLOTTED</Text>
+                  <View style={{ flex: 1, backgroundColor: COLORS.surface, padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: RESULT_COLORS.danger }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: RESULT_COLORS.danger }}>{bulkCheckState.summary.notAllotted}</Text>
+                    <Text style={{ fontSize: 8, color: RESULT_COLORS.danger, fontWeight: 'bold' }}>NOT ALLOTTED</Text>
                   </View>
-                  <View style={{ flex: 1, backgroundColor: '#FFF7ED', padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#F9731620' }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#F97316' }}>{bulkCheckState.summary.captchaErrors + bulkCheckState.summary.errors}</Text>
-                    <Text style={{ fontSize: 8, color: '#F97316', fontWeight: 'bold' }}>ERRORS</Text>
+                  <View style={{ flex: 1, backgroundColor: COLORS.surface, padding: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: RESULT_COLORS.warning }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: RESULT_COLORS.warning }}>{bulkCheckState.summary.captchaErrors + bulkCheckState.summary.errors}</Text>
+                    <Text style={{ fontSize: 8, color: RESULT_COLORS.warning, fontWeight: 'bold' }}>ERRORS</Text>
                   </View>
                 </View>
-                
+
                 {bulkCheckState.currentCaptchaImage ? (
                   <View style={panelStyles.fsCaptchaContainer}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                       <ActivityIndicator size="small" color="#6200EE" />
+                       <ActivityIndicator size="small" color={COLORS.accent} />
                        <Text style={panelStyles.fsCaptchaLabel}>Solving Captcha...</Text>
                     </View>
-                    <Image 
-                      source={{ uri: `data:image/png;base64,${bulkCheckState.currentCaptchaImage}` }} 
+                    <Image
+                      source={{ uri: `data:image/png;base64,${bulkCheckState.currentCaptchaImage}` }}
                       style={panelStyles.fsCaptchaImage}
                       resizeMode="contain"
                     />
@@ -1014,15 +1193,15 @@ export default function BulkCheckPanel({
                     )}
                   </View>
                 ) : (
-                  <View style={{alignItems: 'center', marginVertical: 20, backgroundColor: '#f8f8f8', padding: 20, borderRadius: 12, width: '100%'}}>
-                     <ActivityIndicator size="large" color="#6200EE" />
-                     <Text style={{color: '#666', marginTop: 10, fontWeight: '600'}}>Extremely Fast Extraction...</Text>
+                  <View style={{alignItems: 'center', marginVertical: 20, backgroundColor: COLORS.surface, padding: 20, borderRadius: 12, width: '100%'}}>
+                     <ActivityIndicator size="large" color={COLORS.accent} />
+                     <Text style={{color: COLORS.mutedText, marginTop: 10, fontWeight: '600'}}>Extremely Fast Extraction...</Text>
                   </View>
                 )}
               </View>
 
               {/* LIVE RESULTS LIST */}
-              <View style={{ flex: 1, borderTopWidth: 1, borderTopColor: '#eee' }}>
+              <View style={{ flex: 1, borderTopWidth: 1, borderTopColor: COLORS.border }}>
                 <FlatList
                   data={bulkCheckState.results}
                   keyExtractor={(_, idx) => idx.toString()}
@@ -1032,25 +1211,25 @@ export default function BulkCheckPanel({
                     const isAllotted = item.status === 'allotted';
                     const isSkipped = item.status === 'skipped';
                     const isCaptchaErr = item.status === 'captcha-error';
-                    
-                    let statusColor = isPending ? '#999' : '#EF4444';
-                    if (isAllotted) statusColor = '#10B981';
-                    if (isSkipped) statusColor = '#9E9E9E';
-                    if (isCaptchaErr) statusColor = '#FF9800';
+
+                    let statusColor = isPending ? COLORS.mutedText : RESULT_COLORS.danger;
+                    if (isAllotted) statusColor = RESULT_COLORS.success;
+                    if (isSkipped) statusColor = RESULT_COLORS.muted;
+                    if (isCaptchaErr) statusColor = RESULT_COLORS.warning;
 
                     let statusLabel = isPending ? 'Pending...' : 'Not Allotted';
-                    if (isAllotted) statusLabel = `Allotted: ${item.shares} Units`;
-                    if (isSkipped) statusLabel = 'Skipped';
-                    if (isCaptchaErr) statusLabel = 'Captcha Error';
+                    if (isAllotted) statusLabel = `ALLOTTED: ${item.shares} UNITS` ;
+                    if (isSkipped) statusLabel = 'SKIPPED';
+                    if (isCaptchaErr) statusLabel = 'CAPTCHA ERROR';
 
                     return (
                       <View style={[
-                        panelStyles.resultCard, 
-                        { 
-                          opacity: isPending ? 0.7 : 1, 
+                        panelStyles.resultCard,
+                        {
+                          opacity: isPending ? 0.7 : 1,
                           marginBottom: 10,
-                          backgroundColor: item.boid === bulkCheckState.currentCheckingBoid ? '#F5F3FF' : 'white',
-                          borderColor: item.boid === bulkCheckState.currentCheckingBoid ? '#6200EE' : '#F3F4F6',
+                          backgroundColor: item.boid === bulkCheckState.currentCheckingBoid ? COLORS.surface : COLORS.text,
+                          borderColor: item.boid === bulkCheckState.currentCheckingBoid ? COLORS.accent : COLORS.primary,
                           borderWidth: item.boid === bulkCheckState.currentCheckingBoid ? 1.5 : 1
                         }
                       ]}>
@@ -1058,22 +1237,16 @@ export default function BulkCheckPanel({
                         <View style={panelStyles.resultCardContent}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <View>
-                              <Text style={[panelStyles.resultCardNickname, item.boid === bulkCheckState.currentCheckingBoid && { fontWeight: '900', color: '#6200EE' }]}>
+                              <Text style={[panelStyles.resultCardNickname, item.boid === bulkCheckState.currentCheckingBoid && { fontWeight: '900', color: COLORS.accent }]}>
                                 {item.nickname}
                               </Text>
                               <Text style={panelStyles.resultCardBoid}>{maskBoid(item.boid)}</Text>
                             </View>
-                            <View style={[panelStyles.resultBadge, { backgroundColor: statusColor + '15' }]}>
+                            <View style={[panelStyles.resultBadge, { backgroundColor: statusColor + '15', paddingHorizontal: 8, paddingVertical: 3 }]}>
                               {isPending ? (
                                 <ActivityIndicator size={10} color={statusColor} style={{ marginRight: 4 }} />
-                              ) : (
-                                <Ionicons 
-                                  name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")} 
-                                  size={12} 
-                                  color={statusColor} 
-                                />
-                              )}
-                              <Text style={[panelStyles.resultBadgeText, { color: statusColor }]}>
+                              ) : null}
+                              <Text style={[panelStyles.resultBadgeText, { color: statusColor, fontWeight: '800' }]}>
                                 {statusLabel}
                               </Text>
                             </View>
@@ -1090,18 +1263,18 @@ export default function BulkCheckPanel({
           {/* RESULTS MODE - LIST VIEW RESTORED */}
           {viewMode === 'results' && (
             <View style={{ flex: 1 }}>
-              <ScrollView 
+              <ScrollView
                 contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
               >
                 <View style={[panelStyles.resultsHeader, { alignItems: 'center' }]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[panelStyles.resultsTitle, { color: bulkCheckState.summary.allotted > 0 ? '#059669' : '#DC2626' }]}>
+                      <Text style={[panelStyles.resultsTitle, { color: bulkCheckState.summary.allotted > 0 ? RESULT_COLORS.success : RESULT_COLORS.danger }]}>
                         {bulkCheckState.summary.allotted > 0 ? "Congratulations! 🎉" : "Sorry, Better luck next time! 🍀"}
                       </Text>
                       <Text style={panelStyles.resultsSubtitle}>
-                        {bulkCheckState.summary.allotted > 0 
-                          ? `You were allotted in ${bulkCheckState.summary.allotted} account(s).` 
+                        {bulkCheckState.summary.allotted > 0
+                          ? `You were allotted in ${bulkCheckState.summary.allotted} account(s).`
                           : "No allotment found in any accounts."}
                       </Text>
                     </View>
@@ -1112,26 +1285,26 @@ export default function BulkCheckPanel({
                 </View>
 
                 {ipoName && (
-                  <View style={{ backgroundColor: '#F3F4F6', padding: 8, borderRadius: 10, marginBottom: 15, borderLeftWidth: 3, borderLeftColor: '#6200EE' }}>
-                    <Text style={{ fontSize: 8, color: '#6B7280', fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>SELECTED COMPANY</Text>
-                    <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>{ipoName}</Text>
+                  <View style={{ backgroundColor: COLORS.primary, padding: 8, borderRadius: 10, marginBottom: 15, borderLeftWidth: 3, borderLeftColor: COLORS.accent }}>
+                    <Text style={{ fontSize: 8, color: COLORS.mutedText, fontWeight: '900', letterSpacing: 1, marginBottom: 1 }}>SELECTED COMPANY</Text>
+                    <Text style={{ fontSize: 14, color: COLORS.text, fontWeight: 'bold' }}>{ipoName}</Text>
                   </View>
                 )}
 
                 {/* Summary Section */}
                 <View style={panelStyles.summaryGrid}>
-                   <View style={[panelStyles.summaryCard, { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}>
-                      <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                   <View style={[panelStyles.summaryCard, { backgroundColor: COLORS.surface, borderColor: RESULT_COLORS.success }]}>
+                      <Ionicons name="checkmark-circle" size={20} color={RESULT_COLORS.success} />
                       <View>
-                        <Text style={[panelStyles.summaryCount, { color: '#047857' }]}>{bulkCheckState.summary.allotted}</Text>
+                        <Text style={[panelStyles.summaryCount, { color: RESULT_COLORS.success }]}>{bulkCheckState.summary.allotted}</Text>
                         <Text style={panelStyles.summaryLabel}>Allotted</Text>
                       </View>
                    </View>
-                   
-                   <View style={[panelStyles.summaryCard, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]}>
-                      <Ionicons name="close-circle" size={20} color="#DC2626" />
+
+                   <View style={[panelStyles.summaryCard, { backgroundColor: COLORS.surface, borderColor: RESULT_COLORS.danger }]}>
+                      <Ionicons name="close-circle" size={20} color={RESULT_COLORS.danger} />
                       <View>
-                        <Text style={[panelStyles.summaryCount, { color: '#B91C1C' }]}>{bulkCheckState.summary.notAllotted}</Text>
+                        <Text style={[panelStyles.summaryCount, { color: RESULT_COLORS.danger }]}>{bulkCheckState.summary.notAllotted}</Text>
                         <Text style={panelStyles.summaryLabel}>Not Allotted</Text>
                       </View>
                    </View>
@@ -1143,21 +1316,21 @@ export default function BulkCheckPanel({
                     const isAllotted = item.status === 'allotted';
                     const isSkipped = item.status === 'skipped';
                     const isCaptchaErr = item.status === 'captcha-error';
-                    
-                    let statusColor = '#EF4444'; // Red
-                    if (isAllotted) statusColor = '#10B981';
-                    if (isSkipped) statusColor = '#9E9E9E';
-                    if (isCaptchaErr) statusColor = '#FF9800';
 
-                    let statusLabel = 'Not Allotted';
-                    if (isAllotted) statusLabel = `Allotted: ${item.shares} Units`;
-                    if (isSkipped) statusLabel = 'Skipped';
-                    if (isCaptchaErr) statusLabel = 'Captcha Error';
+                    let statusColor = RESULT_COLORS.danger; // Red
+                    if (isAllotted) statusColor = RESULT_COLORS.success;
+                    if (isSkipped) statusColor = RESULT_COLORS.muted;
+                    if (isCaptchaErr) statusColor = RESULT_COLORS.warning;
+
+                    let statusLabel = 'NOT ALLOTTED';
+                    if (isAllotted) statusLabel = `ALLOTTED: ${item.shares} UNITS` ;
+                    if (isSkipped) statusLabel = 'SKIPPED';
+                    if (isCaptchaErr) statusLabel = 'CAPTCHA ERROR';
 
                     return (
                       <View key={index} style={panelStyles.resultCard}>
                         <View style={[
-                          panelStyles.resultCardIndicator, 
+                          panelStyles.resultCardIndicator,
                           { backgroundColor: statusColor }
                         ]} />
                         <View style={panelStyles.resultCardContent}>
@@ -1170,10 +1343,10 @@ export default function BulkCheckPanel({
                               panelStyles.resultBadge,
                               { backgroundColor: statusColor + '10' }
                             ]}>
-                              <Ionicons 
-                                name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")} 
-                                size={14} 
-                                color={statusColor} 
+                              <Ionicons
+                                name={isAllotted ? "trophy" : (isSkipped ? "play-skip-forward" : "close-circle-outline")}
+                                size={14}
+                                color={statusColor}
                               />
                               <Text style={[
                                 panelStyles.resultBadgeText,
@@ -1192,7 +1365,7 @@ export default function BulkCheckPanel({
 
               {/* REFINED ACTION BUTTONS (BOTTOM) */}
               <View style={[panelStyles.stickyFooter, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
-                 <TouchableOpacity 
+                 <TouchableOpacity
                    style={panelStyles.btnTakeScreenshot}
                    onPress={() => setShowPreviewModal(true)}
                  >
@@ -1200,7 +1373,7 @@ export default function BulkCheckPanel({
                    <Text style={panelStyles.btnTakeScreenshotText}>Take Screenshot</Text>
                  </TouchableOpacity>
 
-                 <TouchableOpacity 
+                 <TouchableOpacity
                    style={panelStyles.btnFinishRefined}
                    onPress={() => {
                      setViewMode('selection');
@@ -1236,28 +1409,28 @@ export default function BulkCheckPanel({
                   <View style={panelStyles.popupHeader}>
                      <Text style={panelStyles.popupTitle}>Branded Report</Text>
                      <TouchableOpacity onPress={() => setShowPreviewModal(false)}>
-                        <Ionicons name="close" size={24} color="#333" />
+                        <Ionicons name="close" size={24} color={COLORS.text} />
                      </TouchableOpacity>
                   </View>
 
                   {capturedImageUri ? (
                     <View style={panelStyles.popupImageContainer}>
-                      <Image 
-                        source={{ uri: capturedImageUri }} 
-                        style={panelStyles.popupImage} 
+                      <Image
+                        source={{ uri: capturedImageUri }}
+                        style={panelStyles.popupImage}
                         resizeMode="contain"
                       />
                     </View>
                   ) : (
                     <View style={panelStyles.popupLoading}>
-                      <ActivityIndicator color="#6200EE" size="large" />
-                      <Text style={{ marginTop: 10, color: '#666' }}>Generating report...</Text>
+                      <ActivityIndicator color={COLORS.accent} size="large" />
+                      <Text style={{ marginTop: 10, color: COLORS.mutedText }}>Generating report...</Text>
                     </View>
                   )}
 
                   <View style={panelStyles.popupActions}>
                      <TouchableOpacity style={panelStyles.popupBtnDownload} onPress={handleSaveToLibrary}>
-                       <Ionicons name="download-outline" size={20} color="#6200EE" />
+                       <Ionicons name="download-outline" size={20} color={COLORS.accent} />
                        <Text style={panelStyles.popupBtnDownloadText}>Save</Text>
                      </TouchableOpacity>
 
@@ -1270,14 +1443,52 @@ export default function BulkCheckPanel({
             </View>
           </Modal>
         </View>
+      </>)}  {/* End Legacy Inline View */}
 
-        {manualPrompt.visible && (
+      <View style={panelStyles.hiddenCaptureSurface}>
+        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }}>
+          <View style={panelStyles.shareCard}>
+            <LinearGradient
+              colors={[COLORS.primary, COLORS.accent]}
+              style={panelStyles.shareCardHeader}
+            >
+              <Image source={require('../../assets/icon.png')} style={panelStyles.shareLogo} />
+              <View>
+                <Text style={panelStyles.shareAppName}>IPO RESULT - BOID AUTOFILLER</Text>
+                <Text style={panelStyles.shareAppTagline}>Check results with confidence</Text>
+              </View>
+            </LinearGradient>
+
+            <View style={panelStyles.shareCardBody}>
+              {ipoName && (
+                <View style={{ backgroundColor: COLORS.primary, padding: 8, borderRadius: 8, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: COLORS.accent }}>
+                  <Text style={{ fontSize: 8, color: COLORS.mutedText, fontWeight: '900', letterSpacing: 0.5 }}>COMPANY</Text>
+                  <Text style={{ fontSize: 13, color: COLORS.text, fontWeight: 'bold' }} numberOfLines={1}>{ipoName}</Text>
+                </View>
+              )}
+              <Text style={panelStyles.shareCardTitle}>IPO Allotment Status</Text>
+              <View style={panelStyles.summaryGridSmall}>
+                <View style={panelStyles.shareSumItem}>
+                  <Text style={[panelStyles.shareSumCount, { color: RESULT_COLORS.success }]}>{bulkCheckState.summary.allotted}</Text>
+                  <Text style={panelStyles.shareSumLabel}>Allotted</Text>
+                </View>
+                <View style={panelStyles.shareSumItem}>
+                  <Text style={[panelStyles.shareSumCount, { color: COLORS.mutedText }]}>{bulkCheckState.summary.total}</Text>
+                  <Text style={panelStyles.shareSumLabel}>Total Checked</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </ViewShot>
+      </View>
+
+      {manualPrompt.visible && (
           <View style={[StyleSheet.absoluteFill, panelStyles.manualModalOverlay, { zIndex: 9999, paddingTop: insets.top + 20 }]}>
-             <KeyboardAvoidingView 
+             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               style={{ flex: 1 }}
             >
-              <ScrollView 
+              <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="always"
                 contentContainerStyle={{ padding: 20 }}
@@ -1292,13 +1503,13 @@ export default function BulkCheckPanel({
                       {manualPrompt.error}
                     </Text>
                   ) : null}
-                  
+
                   {manualPrompt.imageBase64 && (
                     <View style={panelStyles.captchaDisplayContainer}>
                        <View style={panelStyles.captchaFrame}>
-                          <Image 
-                             source={{ uri: `data:image/png;base64,${manualPrompt.imageBase64}` }} 
-                             style={{ width: 260, height: 100 }} 
+                          <Image
+                             source={{ uri: `data:image/png;base64,${manualPrompt.imageBase64}` }}
+                             style={{ width: 260, height: 100 }}
                              resizeMode="contain"
                           />
                        </View>
@@ -1319,7 +1530,7 @@ export default function BulkCheckPanel({
                           manualPrompt.resolvePromise(text);
                           setManualPrompt(prev => ({ ...prev, visible: false, error: '' }));
                           setManualInput('');
-                        }, 100); 
+                        }, 100);
                       }
                     }}
                     autoFocus
@@ -1334,7 +1545,7 @@ export default function BulkCheckPanel({
                   />
 
                   <View style={panelStyles.manualActions}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[panelStyles.manualCancel, { width: '100%', borderRightWidth: 0 }]}
                       onPress={() => {
                         manualPrompt.resolvePromise(null);
@@ -1350,7 +1561,6 @@ export default function BulkCheckPanel({
             </KeyboardAvoidingView>
           </View>
         )}
-      </Modal>
 
     </View>
   );
@@ -1359,126 +1569,715 @@ export default function BulkCheckPanel({
 const panelStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.primary,
   },
-  // New Styles for Selection View
-  selectionView: {
-    padding: 16,
-    backgroundColor: '#EEF2FF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    marginBottom: 12,
+  headerShell: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
   },
-  instructionContainer: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 16,
+    justifyContent: 'space-between',
   },
-  instructionText: {
-    fontSize: 14,
-    color: '#312E81',
-    lineHeight: 20,
+  headerTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     flex: 1,
   },
-  bold: {
-    fontWeight: 'bold',
-    color: '#6200EE',
+  headerIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  providerContainer: {
-    marginBottom: 16,
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
   },
-  providerLabel: {
-    fontSize: 14,
+  headerSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: COLORS.mutedText,
+  },
+  headerCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  headerStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  headerStatPill: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  headerStatValue: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  headerStatLabel: {
+    marginTop: 2,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#374151',
+    color: COLORS.mutedText,
+  },
+  selectionTop: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  companyBanner: {
+    backgroundColor: COLORS.surface,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 1,
+  },
+  companyBannerCompact: {
+    backgroundColor: COLORS.surface,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+  },
+  companyBannerLabel: {
+    fontSize: 10,
+    color: COLORS.accent,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 3,
+  },
+  companyBannerTitle: {
+    fontSize: 15,
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  selectionView: {
+    padding: 16,
+    gap: 14,
+    marginBottom: 12,
+  },
+  sectionCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  sectionHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  sectionDescription: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.mutedText,
+  },
+  modeCard: {
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+  },
+  modeCardActive: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.accent,
+  },
+  modeCardInactive: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.primary,
+  },
+  modeCardCompact: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modeCardCompactText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  modeCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  modeCardCopy: {
+    flex: 1,
+  },
+  modeCardEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.mutedText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  modeCardTitle: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  modeCardTitleActive: {
+    color: COLORS.text,
+  },
+  modeCardDescription: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.mutedText,
+  },
+  switchTrack: {
+    width: 52,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  switchTrackActive: {
+    backgroundColor: COLORS.accent,
+  },
+  switchTrackCompact: {
+    width: 42,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+  },
+  switchThumbActive: {
+    alignSelf: 'flex-end',
+  },
+  switchThumbCompact: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+  },
+  bulkControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  accountsHeader: {
+    marginBottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  accountsTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  accountsSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: COLORS.mutedText,
+  },
+  selectionToolsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  accountsPremiumHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  accountsPremiumTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  accountsPremiumSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.mutedText,
+  },
+  resultMiniStats: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  resultMiniPill: {
+    minWidth: 38,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  resultMiniPillSuccess: {
+    backgroundColor: RESULT_CARD_COLORS.success,
+  },
+  resultMiniPillDanger: {
+    backgroundColor: RESULT_CARD_COLORS.danger,
+  },
+  resultMiniValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  selectionToolButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  selectionToolText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.accent,
+  },
+  addAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  addAccountButtonTop: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  addAccountButtonText: {
+    fontSize: 12,
+    color: COLORS.text,
+    fontWeight: '800',
+  },
+  accountManagerHint: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.mutedText,
+    fontWeight: '600',
+  },
+  emptyAccountsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  emptyAccountsIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    marginBottom: 14,
+  },
+  emptyAccountsTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  emptyAccountsText: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    color: COLORS.mutedText,
+  },
+  emptyAccountsButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  emptyAccountsButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  accountCardMuted: {
+    opacity: 0.6,
+  },
+  accountCardSuccess: {
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: RESULT_CARD_COLORS.success,
+    shadowColor: RESULT_CARD_COLORS.success,
+    shadowOpacity: 0.28,
+    elevation: 4,
+  },
+  accountCardDanger: {
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: RESULT_CARD_COLORS.danger,
+    shadowColor: RESULT_CARD_COLORS.danger,
+    shadowOpacity: 0.24,
+    elevation: 4,
+  },
+  accountCardWarning: {
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: RESULT_CARD_COLORS.warning,
+    shadowColor: RESULT_CARD_COLORS.warning,
+    shadowOpacity: 0.24,
+    elevation: 4,
+  },
+  accountCardActive: {
+    borderColor: 'rgba(255,255,255,0.32)',
+    backgroundColor: COLORS.accent,
+    shadowColor: COLORS.accent,
+    shadowOpacity: 0.28,
+    elevation: 4,
+  },
+  statusOrb: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginRight: 12,
+  },
+  statusOrbSuccess: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.26)',
+  },
+  statusOrbDanger: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.26)',
+  },
+  statusOrbWarning: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.26)',
+  },
+  statusOrbActive: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.26)',
+  },
+  statusOrbMuted: {
+    opacity: 0.7,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  inlineStatusPill: {
+    minHeight: 28,
+    maxWidth: 122,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineStatusSuccess: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineStatusDanger: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineStatusWarning: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineStatusActive: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineStatusMuted: {
+    opacity: 0.74,
+  },
+  inlineStatusText: {
+    color: COLORS.mutedText,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  inlineStatusTextSuccess: {
+    color: COLORS.text,
+  },
+  inlineStatusTextDanger: {
+    color: COLORS.text,
+  },
+  inlineStatusTextWarning: {
+    color: COLORS.text,
+  },
+  inlineStatusTextActive: {
+    color: COLORS.text,
+  },
+  inlineStatusTextMuted: {
+    color: COLORS.mutedText,
+  },
+  accountIdentity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  accountAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountAvatarMuted: {
+    backgroundColor: COLORS.primary,
+  },
+  accountAvatarText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.accent,
+  },
+  accountActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  quickCheckButton: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.accent,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  quickCheckButtonText: {
+    fontSize: 11,
+    color: COLORS.text,
+    fontWeight: '800',
+  },
+  selectionToggleSwitch: {
+    width: 52,
+    height: 30,
+    borderRadius: 999,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  selectionToggleEnabled: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
+  },
+  selectionToggleDisabled: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  selectionToggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+  },
+  selectionToggleThumbEnabled: {
+    alignSelf: 'flex-end',
+  },
+  cardProgressTrack: {
+    marginTop: 10,
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  cardProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: COLORS.text,
+  },
+  startFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 64,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  startFooterInline: {
+    marginTop: 8,
+  },
+  startFooterSummary: {
+    marginBottom: 12,
+  },
+  startFooterTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  inlineStageContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: COLORS.primary,
+  },
+  inlineStageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
-  toggleWrapper: {
-    flexDirection: 'row',
-    backgroundColor: '#E0E7FF',
-    borderRadius: 8,
-    padding: 4,
+  inlineStageTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
   },
-  toggleOption: {
-    flex: 1,
-    paddingVertical: 8,
+  inlineStageClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
-    borderRadius: 6,
-  },
-  toggleActive: {
-    backgroundColor: 'white',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  toggleText: {
-    fontSize: 13,
-    fontWeight: '500', 
-    color: '#6B7280',
-  },
-  toggleTextActive: {
-    color: '#6200EE',
-    fontWeight: '700',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   bulkCheckButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6200EE',
-    padding: 14,
-    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 16,
     gap: 8,
     elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+  },
+  bulkCheckButtonDisabled: {
+    backgroundColor: COLORS.surface,
+    opacity: 0.55,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   bulkCheckText: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '800',
   },
   progressContainer: {
     padding: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     borderRadius: 10,
     marginBottom: 12,
   },
   progressText: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: COLORS.text,
     marginBottom: 10,
   },
   progressBar: {
     height: 10,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.border,
     borderRadius: 5,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
   },
   progressDetail: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.mutedText,
     marginTop: 8,
     textAlign: 'right',
   },
   // PREVIEW STYLES
   previewContainer: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     borderRadius: 20,
     padding: 15,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     alignItems: 'center',
   },
   previewTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#6200EE',
+    color: COLORS.accent,
     marginBottom: 10,
     textTransform: 'uppercase',
   },
@@ -1486,7 +2285,7 @@ const panelStyles = StyleSheet.create({
     width: '100%',
     height: 400,
     borderRadius: 12,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
   },
   generatingCard: {
     flex: 1,
@@ -1497,18 +2296,24 @@ const panelStyles = StyleSheet.create({
   generatingText: {
     marginTop: 15,
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.mutedText,
     fontWeight: '600',
   },
 
   // SHARE CARD STYLES (HIDDEN)
+  hiddenCaptureSurface: {
+    position: 'absolute',
+    opacity: 0,
+    left: -5000,
+    top: 0,
+  },
   shareCard: {
     width: 320,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   shareCardHeader: {
     flexDirection: 'row',
@@ -1520,10 +2325,10 @@ const panelStyles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
   },
   shareAppName: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: '900',
   },
@@ -1538,7 +2343,7 @@ const panelStyles = StyleSheet.create({
   shareCardTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1F2937',
+    color: COLORS.text,
     textAlign: 'center',
     marginBottom: 15,
   },
@@ -1548,7 +2353,7 @@ const panelStyles = StyleSheet.create({
     gap: 30,
     marginBottom: 20,
     paddingVertical: 15,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
   },
   shareSumItem: {
@@ -1560,7 +2365,7 @@ const panelStyles = StyleSheet.create({
   },
   shareSumLabel: {
     fontSize: 10,
-    color: '#6B7280',
+    color: COLORS.mutedText,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
@@ -1574,14 +2379,14 @@ const panelStyles = StyleSheet.create({
   shareResultText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4B5563',
+    color: COLORS.mutedText,
   },
   shareCardFooter: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     padding: 12,
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
   },
   shareFooterInfo: {
     flexDirection: 'row',
@@ -1591,7 +2396,7 @@ const panelStyles = StyleSheet.create({
   shareFooterText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#4B5563',
+    color: COLORS.mutedText,
   },
 
   // STICKY BOTTOM ACTIONS
@@ -1600,17 +2405,21 @@ const panelStyles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
-    padding: 16,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 18,
     flexDirection: 'row',
     gap: 10,
     elevation: 20,
-    shadowColor: '#000',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   btnDownload: {
     width: 50,
@@ -1618,43 +2427,43 @@ const panelStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: COLORS.primary,
     borderWidth: 1,
-    borderColor: '#6200EE',
+    borderColor: COLORS.accent,
   },
   btnShare: {
     flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#25D366',
+    backgroundColor: RESULT_COLORS.success,
     borderRadius: 12,
     gap: 8,
   },
   btnShareText: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: 'bold',
   },
   btnFinish: {
     flex: 1,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
   },
   btnFinishText: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: 'bold',
   },
 
   resultsContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: COLORS.primary,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1665,54 +2474,54 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 22,
   },
   resultsTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '900',
-    color: '#111827',
+    color: COLORS.text,
   },
   resultsSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    fontSize: 13,
+    color: COLORS.mutedText,
+    marginTop: 4,
   },
   batchBadge: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: COLORS.border,
   },
   batchBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#4338CA',
+    color: COLORS.text,
     letterSpacing: 0.5,
   },
   summaryGrid: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   summaryCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 10,
   },
   summaryCount: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
   },
   summaryLabel: {
     fontSize: 11,
-    color: '#4B5563',
-    fontWeight: '500',
+    color: COLORS.mutedText,
+    fontWeight: '600',
   },
   resultsList: {
     maxHeight: 300,
@@ -1723,13 +2532,13 @@ const panelStyles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F9FAFB',
+    borderBottomColor: COLORS.primary,
   },
   resultStatusDot: (allotted) => ({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: allotted ? '#10B981' : '#EF4444',
+    backgroundColor: allotted ? RESULT_COLORS.success : RESULT_COLORS.danger,
   }),
   resultDetails: {
     flex: 1,
@@ -1737,10 +2546,10 @@ const panelStyles = StyleSheet.create({
   resultBoid: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#374151',
+    color: COLORS.mutedText,
   },
   nicknameBadge: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -1748,7 +2557,7 @@ const panelStyles = StyleSheet.create({
   nicknameBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#4B5563',
+    color: COLORS.mutedText,
     textTransform: 'uppercase',
   },
   resultStatus: {
@@ -1765,21 +2574,21 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderWidth: 1.5,
-    borderColor: '#6200EE',
+    borderColor: COLORS.accent,
     padding: 14,
     borderRadius: 12,
     gap: 8,
   },
   shareImageButtonText: {
-    color: '#6200EE',
+    color: COLORS.accent,
     fontSize: 14,
     fontWeight: 'bold',
   },
   doneButtonFull: {
     flex: 1,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     padding: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -1787,7 +2596,7 @@ const panelStyles = StyleSheet.create({
     elevation: 2,
   },
   doneButtonText: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: 'bold',
   },
@@ -1797,23 +2606,23 @@ const panelStyles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
     gap: 8,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: COLORS.surface,
     borderRadius: 10,
     marginTop: 10,
   },
   checkingIndicatorText: {
     fontSize: 13,
-    color: '#6200EE',
+    color: COLORS.accent,
     fontWeight: '600',
   },
   // Manual Modal Styles
    manualModalOverlay: {
      flex: 1,
-     backgroundColor: 'rgba(0,0,0,0.7)', 
+     backgroundColor: 'rgba(0,0,0,0.7)',
      justifyContent: 'flex-start',
    },
   manualModalContent: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 20,
     elevation: 4,
@@ -1822,7 +2631,7 @@ const panelStyles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   manualHeader: {
     flexDirection: 'row',
@@ -1833,17 +2642,17 @@ const panelStyles = StyleSheet.create({
   manualTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#6200EE',
+    color: COLORS.accent,
   },
   manualSubtitle: {
     fontSize: 14,
-    color: '#4B5563',
+    color: COLORS.mutedText,
     marginBottom: 20,
   },
   manualNickname: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#6200EE',
+    color: COLORS.accent,
     textAlign: 'center',
     marginBottom: 15,
     textTransform: 'uppercase',
@@ -1853,25 +2662,25 @@ const panelStyles = StyleSheet.create({
     alignItems: 'center',
   },
   captchaFrame: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     padding: 15,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   noticeText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.mutedText,
     marginTop: 8,
     fontStyle: 'italic',
   },
   manualInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.primary,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: COLORS.border,
     borderRadius: 8,
     padding: 15,
     fontSize: 20,
@@ -1879,7 +2688,7 @@ const panelStyles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 8,
     marginBottom: 20,
-    color: '#111827',
+    color: COLORS.text,
   },
   manualActions: {
     flexDirection: 'row',
@@ -1891,83 +2700,84 @@ const panelStyles = StyleSheet.create({
     alignItems: 'center',
   },
   manualCancelText: {
-    color: '#6B7280',
+    color: COLORS.mutedText,
     fontWeight: '600',
   },
   manualSubmit: {
     flex: 2,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
   },
   manualSubmitDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: COLORS.surface,
+    opacity: 0.55,
   },
   manualSubmitText: {
-    color: 'white',
+    color: COLORS.text,
     fontWeight: 'bold',
   },
   // Full Screen Modal Styles
   fsContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.primary,
   },
   fsHeader: {
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.border,
   },
   fsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
   },
   fsProgressContainer: {
-    height: 4,
-    backgroundColor: '#E5E7EB',
+    height: 8,
+    backgroundColor: COLORS.border,
     width: '100%',
   },
   fsProgressFill: {
     height: '100%',
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
   },
   fsStatusSection: {
-    backgroundColor: 'white',
-    padding: 20,
+    backgroundColor: COLORS.surface,
+    padding: 22,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    marginBottom: 10,
+    borderBottomColor: COLORS.border,
+    marginBottom: 12,
   },
   fsStatusText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.mutedText,
     marginBottom: 4,
   },
   fsNickname: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
     marginBottom: 15,
   },
   fsCaptchaContainer: {
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    padding: 16,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     width: '100%',
   },
   fsCaptchaLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.mutedText,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -1977,24 +2787,24 @@ const panelStyles = StyleSheet.create({
     width: 200,
     height: 80,
     marginBottom: 10,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 4,
   },
   fsCaptchaSolved: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#10B981',
+    color: RESULT_COLORS.success,
   },
   fsListContainer: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 20,
   },
   fsFooter: {
     padding: 20,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
     flexDirection: 'row',
     gap: 12,
   },
@@ -2006,12 +2816,12 @@ const panelStyles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#6200EE',
-    backgroundColor: 'white',
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.surface,
   },
   doneButtonFull: {
     flex: 2,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     padding: 14,
     borderRadius: 8,
     alignItems: 'center',
@@ -2019,9 +2829,9 @@ const panelStyles = StyleSheet.create({
   },
   resultNickname: {
     fontSize: 12,
-    color: '#6200EE',
+    color: COLORS.accent,
     fontWeight: 'bold',
-    backgroundColor: '#F3E8FF',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -2037,7 +2847,7 @@ const panelStyles = StyleSheet.create({
   },
   popupContent: {
     width: '100%',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     overflow: 'hidden',
     padding: 20,
@@ -2051,16 +2861,16 @@ const panelStyles = StyleSheet.create({
   popupTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: COLORS.text,
   },
   popupImageContainer: {
     width: '100%',
     height: 400,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   popupImage: {
     width: '100%',
@@ -2080,15 +2890,15 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3E8FF',
+    backgroundColor: COLORS.primary,
     padding: 15,
     borderRadius: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#6200EE',
+    borderColor: COLORS.accent,
   },
   popupBtnDownloadText: {
-    color: '#6200EE',
+    color: COLORS.accent,
     fontWeight: 'bold',
   },
   popupBtnShare: {
@@ -2096,13 +2906,13 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#25D366',
+    backgroundColor: RESULT_COLORS.success,
     padding: 15,
     borderRadius: 12,
     gap: 8,
   },
   popupBtnShareText: {
-    color: 'white',
+    color: COLORS.text,
     fontWeight: 'bold',
   },
   btnShareReport: {
@@ -2110,43 +2920,43 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     borderRadius: 12,
     gap: 8,
   },
   btnShareReportText: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: 'bold',
   },
   btnFinishSmall: {
     flex: 1,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#6200EE',
+    borderColor: COLORS.accent,
   },
   btnFinishSmallText: {
-    color: '#6200EE',
+    color: COLORS.accent,
     fontSize: 14,
     fontWeight: 'bold',
   },
   // Phase 11 Refined Cards
   resultCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 10,
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    marginBottom: 12,
     flexDirection: 'row',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#F3F4F6',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    borderColor: COLORS.border,
+    elevation: 1,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 12,
   },
   resultCardIndicator: {
     width: 6,
@@ -2154,27 +2964,27 @@ const panelStyles = StyleSheet.create({
   },
   resultCardContent: {
     flex: 1,
-    padding: 12,
-    paddingLeft: 10,
+    padding: 14,
+    paddingLeft: 12,
   },
   resultCardNickname: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#111827',
+    color: COLORS.text,
   },
   resultCardBoid: {
     fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    color: COLORS.mutedText,
+    marginTop: 4,
     letterSpacing: 0.5,
   },
   resultBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
-    gap: 4,
+    gap: 5,
   },
   resultBadgeText: {
     fontSize: 11,
@@ -2186,71 +2996,71 @@ const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6200EE',
-    borderRadius: 14,
+    backgroundColor: COLORS.accent,
+    borderRadius: 16,
     gap: 8,
-    height: 56, // Increased height
+    height: 58,
     elevation: 4,
-    shadowColor: '#6200EE',
+    shadowColor: COLORS.accent,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
   },
   btnTakeScreenshotText: {
-    color: 'white',
-    fontSize: 16, // Professional size
+    color: COLORS.text,
+    fontSize: 16,
     fontWeight: '900',
   },
   btnFinishRefined: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    height: 56, // Increased height
+    borderRadius: 16,
+    height: 58,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   btnFinishRefinedText: {
-    color: '#4B5563',
+    color: COLORS.text,
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   manualErrorText: {
-    color: '#F44336',
+    color: RESULT_COLORS.danger,
     fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'center',
-    backgroundColor: '#FFEBEE',
+    backgroundColor: 'rgba(220,53,69,0.14)',
     padding: 8,
     borderRadius: 8,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#FFCDD2',
+    borderColor: RESULT_COLORS.danger,
   },
   manualSubmitText: {
-    color: 'white',
+    color: COLORS.text,
     fontWeight: 'bold',
     fontSize: 15,
   },
   manualSubmitDisabled: {
     opacity: 0.5,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: COLORS.surface,
   },
   totalBadgeRefined: {
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
-    shadowColor: '#6200EE',
+    shadowColor: COLORS.accent,
     shadowOpacity: 0.2,
     shadowRadius: 5,
   },
   totalBadgeValue: {
-    color: 'white',
+    color: COLORS.text,
     fontSize: 18,
     fontWeight: '900',
   },
@@ -2266,31 +3076,34 @@ const localStyles = StyleSheet.create({
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#eee',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderColor: COLORS.border,
+    elevation: 1,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
   },
   accountNickname: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '800',
+    color: COLORS.text,
   },
   accountBoid: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    color: COLORS.mutedText,
+    marginTop: 4,
+    letterSpacing: 0.4,
   },
   iconBtn: {
     padding: 8,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     width: 44,

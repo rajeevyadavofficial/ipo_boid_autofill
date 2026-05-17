@@ -9,10 +9,12 @@ import {
   TouchableOpacity,
   Linking,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getApiBaseUrl } from '../../utils/config';
+import { COLORS } from '../../utils/theme';
 
 import { adToBs, nepaliMonths } from '../../utils/dateConverter';
 
@@ -38,7 +40,7 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('Open'); // Open, Upcoming, Closed, News
+  const [activeTab, setActiveTab] = useState('Upcoming'); // Upcoming, News
   const [sortAscending, setSortAscending] = useState(true);
 
   const fetchIpos = async () => {
@@ -46,7 +48,7 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
       const type = activeTab.toLowerCase();
       const response = await fetch(`${API_BASE_URL}/ipos?type=${type}`);
       const data = await response.json();
-      
+
       if (data.success && data.data) {
         setIpos(data.data);
       } else {
@@ -101,7 +103,7 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
   const getSortedIpos = () => {
     return [...ipos].sort((a, b) => {
       let dateA, dateB;
-      
+
       if (activeTab === 'Open') {
         dateA = new Date(a.closingDate);
         dateB = new Date(b.closingDate);
@@ -168,7 +170,7 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.card}
       onPress={() => onSelectIPO?.(item)}
       activeOpacity={0.7}
@@ -186,10 +188,10 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
           )}
         </View>
       </View>
-      
+
       <Text style={styles.companyName}>{item.company}</Text>
       <Text style={styles.typeText}>{item.type}</Text>
-      
+
       <View style={styles.detailsContainer}>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Units:</Text>
@@ -207,7 +209,7 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
             <Text style={styles.dateValueBS}>{formatBSDate(item.openingDate)} BS</Text>
             <Text style={styles.timeValue}>{formatTime(item.openingDate)}</Text>
           </View>
-          <Ionicons name="arrow-forward" size={20} color="#6200EE" style={styles.arrowIcon} />
+          <Ionicons name="arrow-forward" size={20} color={COLORS.accent} style={styles.arrowIcon} />
           <View style={styles.dateColumn}>
             <Text style={styles.dateLabel}>Closing</Text>
             <Text style={styles.dateValueAD}>{formatADDate(item.closingDate)}</Text>
@@ -220,57 +222,59 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
   );
 
   const renderNewsItem = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.newsCard}
       onPress={() => Linking.openURL(item.link)}
       activeOpacity={0.7}
     >
       <View style={styles.newsHeader}>
-        <Ionicons name="newspaper-outline" size={20} color="#6200EE" />
+        <Ionicons name="newspaper-outline" size={20} color={COLORS.accent} />
         <Text style={styles.newsDate}>{item.date}</Text>
       </View>
       <Text style={styles.newsTitle}>{item.title}</Text>
       <View style={styles.newsFooter}>
         <Text style={styles.readMore}>Read on ShareSansar</Text>
-        <Ionicons name="chevron-forward" size={14} color="#6200EE" />
+        <Ionicons name="chevron-forward" size={14} color={COLORS.accent} />
       </View>
     </TouchableOpacity>
   );
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Open': return '#4CAF50'; 
-      case 'Upcoming': return '#00BCD4'; 
-      case 'Closed': return '#F44336'; 
-      default: return '#999';
+      case 'Open': return COLORS.accent;
+      case 'Upcoming': return COLORS.accent;
+      case 'Closed': return COLORS.surface;
+      default: return COLORS.surface;
     }
   };
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" backgroundColor={COLORS.primary} />
+      <View style={{ height: insets.top, backgroundColor: COLORS.primary }} />
       {/* Header with Tabs */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Text style={styles.headerTitle}>Upcoming IPOs</Text>
+      <View style={styles.header}>
+        <View style={{ backgroundColor: COLORS.surface, paddingVertical: 15, paddingHorizontal: 16 }}>
+           <Text style={[styles.headerTitle, { color: '#fff', marginBottom: 0, paddingHorizontal: 0 }]}>Upcoming IPOs</Text>
+        </View>
         <View style={styles.tabsContainer}>
-          {renderTab('Open')}
           {renderTab('Upcoming')}
-          {renderTab('Closed')}
           {renderTab('News')}
         </View>
-        
+
         {activeTab !== 'News' && (
           <TouchableOpacity style={styles.sortButton} onPress={toggleSort}>
             <Text style={styles.sortText}>
               Sort by Date {sortAscending ? '↑' : '↓'}
             </Text>
-            <Ionicons name={sortAscending ? "arrow-up" : "arrow-down"} size={16} color="#6200EE" />
+            <Ionicons name={sortAscending ? "arrow-up" : "arrow-down"} size={16} color={COLORS.accent} />
           </TouchableOpacity>
         )}
       </View>
 
       {loading && !refreshing ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#6200EE" />
+          <ActivityIndicator size="large" color={COLORS.accent} />
         </View>
       ) : (
         <FlatList
@@ -279,11 +283,11 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
           renderItem={activeTab === 'News' ? renderNewsItem : renderItem}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6200EE']} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.accent]} tintColor={COLORS.accent} />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name={activeTab === 'News' ? "newspaper-outline" : "documents-outline"} size={64} color="#ccc" />
+              <Ionicons name={activeTab === 'News' ? "newspaper-outline" : "documents-outline"} size={64} color={COLORS.accent} />
               <Text style={styles.emptyText}>No {activeTab.toLowerCase()} found</Text>
               {activeTab !== 'News' && <Text style={styles.emptySubtext}>Add IPOs from the Admin App</Text>}
             </View>
@@ -297,7 +301,7 @@ export default function UpcomingIposScreen({ onSelectIPO }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: COLORS.primary,
   },
   center: {
     flex: 1,
@@ -305,8 +309,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    backgroundColor: 'white',
-    paddingBottom: 10,
+    backgroundColor: COLORS.surface,
+    paddingTop: 0,
+    paddingBottom: 0,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -315,8 +320,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '900',
     color: '#333',
     paddingHorizontal: 16,
     marginBottom: 16,
@@ -330,19 +335,19 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderBottomWidth: 2,
+    borderBottomWidth: 3,
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#6200EE',
+    borderBottomColor: COLORS.accent,
   },
   tabText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#888',
+    fontWeight: '700',
+    color: COLORS.mutedText,
   },
   activeTabText: {
-    color: '#6200EE',
+    color: COLORS.text,
   },
   sortButton: {
     flexDirection: 'row',
@@ -353,20 +358,20 @@ const styles = StyleSheet.create({
   },
   sortText: {
     fontSize: 12,
-    color: '#6200EE',
+    color: COLORS.accent,
     marginRight: 4,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   listContent: {
     padding: 16,
     paddingBottom: 80,
   },
   card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -389,13 +394,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF9800',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 16,
     gap: 4,
   },
   countdownText: {
     color: 'white',
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '900',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -405,25 +410,25 @@ const styles = StyleSheet.create({
   statusText: {
     color: 'white',
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '900',
     textTransform: 'uppercase',
   },
   typeText: {
     fontSize: 13,
-    color: '#6200EE',
-    fontWeight: '600',
+    color: COLORS.accent,
+    fontWeight: '700',
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   companyName: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#222',
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.text,
     marginBottom: 4,
     lineHeight: 24,
   },
   detailsContainer: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: COLORS.primary,
     borderRadius: 8,
     padding: 12,
   },
@@ -434,16 +439,16 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: '#666',
+    color: COLORS.mutedText,
   },
   detailValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
+    color: COLORS.text,
   },
   divider: {
     height: 1,
-    backgroundColor: '#ddd',
+    backgroundColor: COLORS.border,
     marginVertical: 12,
   },
   dateSection: {
@@ -459,26 +464,26 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: 11,
-    color: '#888',
+    color: COLORS.mutedText,
     marginBottom: 4,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
   },
   dateValueAD: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#333',
+    color: COLORS.text,
     marginBottom: 2,
   },
   dateValueBS: {
     fontSize: 12,
-    color: '#6200EE',
-    fontWeight: '600',
+    color: COLORS.accent,
+    fontWeight: '700',
     marginBottom: 2,
   },
   timeValue: {
     fontSize: 12,
-    color: '#666',
+    color: COLORS.mutedText,
     fontWeight: '500',
   },
   emptyContainer: {
@@ -488,28 +493,28 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#888',
+    color: COLORS.mutedText,
     marginTop: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#aaa',
+    color: COLORS.mutedText,
     marginTop: 8,
     textAlign: 'center',
   },
   newsCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     borderLeftWidth: 4,
-    borderLeftColor: '#6200EE',
+    borderLeftColor: COLORS.accent,
   },
   newsHeader: {
     flexDirection: 'row',
@@ -519,13 +524,13 @@ const styles = StyleSheet.create({
   },
   newsDate: {
     fontSize: 12,
-    color: '#888',
+    color: COLORS.mutedText,
     fontWeight: '500',
   },
   newsTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: COLORS.text,
     lineHeight: 22,
     marginBottom: 12,
   },
@@ -537,7 +542,7 @@ const styles = StyleSheet.create({
   },
   readMore: {
     fontSize: 12,
-    color: '#6200EE',
-    fontWeight: '600',
+    color: COLORS.accent,
+    fontWeight: '700',
   },
 });

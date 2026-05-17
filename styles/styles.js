@@ -1,25 +1,25 @@
 // components/MainAppV2/styles.js
 import { StyleSheet } from 'react-native';
+import { COLORS } from '../utils/theme';
 
 export default StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'black',
+    backgroundColor: COLORS.primary,
   },
 
   webView: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.primary,
   },
 
   popupButton: {
     position: 'absolute',
     right: 20,
     bottom: 60,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     padding: 12,
     borderRadius: 50,
     elevation: 5,
@@ -36,7 +36,7 @@ export default StyleSheet.create({
     backgroundColor: '#000000aa',
   },
   modalContent: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 16,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
@@ -46,27 +46,30 @@ export default StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: COLORS.text,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#aaa',
+    borderColor: COLORS.border,
     padding: 10,
     borderRadius: 8,
     marginBottom: 10,
+    backgroundColor: COLORS.surface,
+    color: COLORS.text,
   },
   saveButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: COLORS.accent,
     padding: 12,
     borderRadius: 8,
     marginBottom: 15,
     alignItems: 'center',
   },
   saveButtonText: {
-    color: 'white',
+    color: COLORS.text,
     fontWeight: 'bold',
   },
   boidCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: COLORS.surface,
     padding: 12,
     height: 80,
     borderRadius: 10,
@@ -79,12 +82,12 @@ export default StyleSheet.create({
   nicknameText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: COLORS.text,
   },
   boidCodeText: {
     fontSize: 14,
     fontFamily: 'monospace',
-    color: '#666',
+    color: COLORS.mutedText,
     marginTop: 2,
   },
   boidActions: {
@@ -96,7 +99,7 @@ export default StyleSheet.create({
     alignSelf: 'center',
   },
   closeText: {
-    color: '#6200EE',
+    color: COLORS.accent,
     fontWeight: 'bold',
   },
   developerContainer: {
@@ -105,7 +108,7 @@ export default StyleSheet.create({
   },
   developerText: {
     fontSize: 14,
-    color: '#555',
+    color: COLORS.mutedText,
     marginBottom: 8,
   },
   iconRow: {
@@ -123,7 +126,7 @@ export default StyleSheet.create({
     right: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffffee',
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     paddingHorizontal: 10,
     zIndex: 10,
@@ -133,18 +136,19 @@ export default StyleSheet.create({
     flex: 1,
     height: 40,
     paddingHorizontal: 8,
+    color: COLORS.text,
   },
   goButton: {
     marginTop: 6,
     marginBottom: 6,
     marginLeft: 8,
-    backgroundColor: '#6200EE',
+    backgroundColor: COLORS.accent,
     padding: 6,
     borderRadius: 50,
   },
   refreshButton: {
     marginLeft: 6,
-    backgroundColor: '#2196F3',
+    backgroundColor: COLORS.accent,
     padding: 6,
     borderRadius: 50,
   },
@@ -153,7 +157,7 @@ export default StyleSheet.create({
     marginVertical: 10,
     padding: 10,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: COLORS.surface,
   },
   resultNickname: {
     fontSize: 16,
@@ -161,7 +165,7 @@ export default StyleSheet.create({
   },
   resultBoid: {
     fontSize: 14,
-    color: '#555',
+    color: COLORS.mutedText,
   },
   resultText: {
     marginTop: 5,

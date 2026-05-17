@@ -8,58 +8,59 @@ import {
 } from 'react-native';
 import { Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS } from '../../utils/theme';
 
 export default function BottomNavBar({
-  onOpenBoidModal,
+  onOpenHome,
+  onOpenAccounts,
   onOpenBulkCheck,
   onOpenBulkApply,
-  onOpenUpcomingIpos,
-  onOpenDeveloperInfo,
+  onOpenMore,
 }) {
   const insets = useSafeAreaInsets();
 
-  const baseHeight = 56;
-  const totalHeight = baseHeight + (insets.bottom || 0);
+  const safePadding = Math.max(insets.bottom, 12);
+  const fixedHeight = 56 + safePadding;
 
   return (
     <View
       style={[
         styles.container,
         {
-          height: totalHeight,
-          paddingBottom: insets.bottom || 8,
+          height: fixedHeight,
+          paddingBottom: safePadding,
         },
       ]}
       pointerEvents="box-none"
     >
-      {/* BOID Manager Button */}
-      <TouchableOpacity style={styles.navButton} onPress={onOpenBoidModal}>
-        <Ionicons name="document-text-outline" size={24} color="#fff" />
-        <Text style={styles.label}>BOIDs</Text>
+      {/* Home Button */}
+      <TouchableOpacity style={styles.navButton} onPress={onOpenHome}>
+        <Ionicons name="home-outline" size={23} color="#fff" />
+        <Text style={styles.label}>Home</Text>
+      </TouchableOpacity>
+
+      {/* Accounts Button */}
+      <TouchableOpacity style={styles.navButton} onPress={onOpenAccounts}>
+        <Ionicons name="people-outline" size={23} color="#fff" />
+        <Text style={styles.label}>Accounts</Text>
       </TouchableOpacity>
 
       {/* Bulk Check Button */}
       <TouchableOpacity style={styles.navButton} onPress={onOpenBulkCheck}>
-        <MaterialCommunityIcons name="robot-outline" size={24} color="#FFD700" />
-        <Text style={[styles.label, { color: '#FFD700' }]}>Bulk Check</Text>
+        <Ionicons name="checkmark-done-circle-outline" size={23} color="#fff" />
+        <Text style={[styles.label, { color: '#fff' }]}>Bulk Check</Text>
       </TouchableOpacity>
 
       {/* Bulk Apply Button */}
       <TouchableOpacity style={styles.navButton} onPress={onOpenBulkApply}>
-        <MaterialCommunityIcons name="send-circle" size={24} color="#4CAF50" />
-        <Text style={[styles.label, { color: '#4CAF50' }]}>Apply IPO</Text>
+        <Ionicons name="rocket-outline" size={23} color="#fff" />
+        <Text style={[styles.label, { color: '#fff' }]}>Bulk Apply</Text>
       </TouchableOpacity>
 
-      {/* Upcoming IPOs Button */}
-      <TouchableOpacity style={styles.navButton} onPress={onOpenUpcomingIpos}>
-        <Ionicons name="calendar-outline" size={24} color="#fff" />
-        <Text style={styles.label}>Upcoming IPOs</Text>
-      </TouchableOpacity>
-
-      {/* Developer Info Button */}
-      <TouchableOpacity style={styles.navButton} onPress={onOpenDeveloperInfo}>
-        <FontAwesome name="user-circle" size={24} color="#fff" />
-        <Text style={styles.label}>Developer</Text>
+      {/* More Button */}
+      <TouchableOpacity style={styles.navButton} onPress={onOpenMore}>
+        <Ionicons name="grid-outline" size={23} color="#fff" />
+        <Text style={styles.label}>More</Text>
       </TouchableOpacity>
     </View>
   );
@@ -73,19 +74,21 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 50,
     elevation: 12,
-    backgroundColor: '#333a56',
+    backgroundColor: COLORS.surface,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingTop: 8,
   },
   navButton: {
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 2,
+    flex: 1,
   },
   label: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 9.5,
     marginTop: 4,
+    textAlign: 'center',
   },
 });

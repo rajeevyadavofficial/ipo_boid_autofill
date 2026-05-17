@@ -14,6 +14,7 @@
       "googleServicesFile": "./google-services.json",
       "versionCode": 16
     },
+    "platforms": ["android", "ios", "web"],
     "extra": {
       "eas": {
         "projectId": "41e9f039-83c5-42e4-a19e-26a8acf96c09"

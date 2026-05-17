@@ -1,26 +1,44 @@
 // screens/MainApp.js
-import React, { useRef, useState, useEffect } from 'react';
-import { View, ToastAndroid, StyleSheet, Platform, Modal, SafeAreaView } from 'react-native';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, Platform, Modal, SafeAreaView, Alert, Linking } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import BoidModal from '../components/boid/BoidModal';
 import WebViewContainer from '../components/main/WebViewContainer';
 import BottomNavBar from '../components/navigation/BottomNavBar';
-import DeveloperSidebar from '../components/developer/DeveloperSidebar';
 import UpcomingIposScreen from './upcomingIpos/UpcomingIposScreen';
+import OpenIposScreen from './openIpos/OpenIposScreen';
 import BulkCheckPanel from '../components/boid/BulkCheckPanel';
-import MerShareAccountModal from '../components/meroshare/MerShareAccountModal';
+import AccountManagerScreen from '../components/main/AccountManagerScreen';
 import BulkApplyPanel from '../components/meroshare/BulkApplyPanel';
+import MoreSidebar from '../components/navigation/MoreSidebar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as NavigationBar from 'expo-navigation-bar';
+import { setStatusBarBackgroundColor } from 'expo-status-bar';
 import { getApiBaseUrl } from '../utils/config';
 import styles from '../styles/styles';
+import { COLORS } from '../utils/theme';
+import { useBoidSync } from '../hooks/useBoidSync';
 
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export default function MainApp() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
-  
+  const lastAutoSyncGoogleIdRef = useRef(null);
+
   const { expoPushToken } = usePushNotifications();
+  const { syncToCloud, syncFromCloud } = useBoidSync();
+
+  // DEEP DIVE FIX: Global Status & Navigation Bar Styling
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      // Force Android system bars to use the app chrome color.
+      setStatusBarBackgroundColor(COLORS.primary, true);
+      NavigationBar.setBackgroundColorAsync(COLORS.primary);
+      NavigationBar.setButtonStyleAsync('light');
+    }
+  }, []);
 
   // Register push token with backend
   useEffect(() => {
@@ -42,12 +60,12 @@ export default function MainApp() {
     }
   }, [expoPushToken]);
 
-  const [modalVisible, setModalVisible] = useState(false);
+  const [showAccountManager, setShowAccountManager] = useState(false);
   const [boidInput, setBoidInput] = useState('');
   const [nicknameInput, setNicknameInput] = useState('');
   const [savedBoids, setSavedBoids] = useState([]);
   const [editIndex, setEditIndex] = useState(null);
-  const [developerVisible, setDeveloperVisible] = useState(false);
+  const [showMoreSidebar, setShowMoreSidebar] = useState(false);
   const [showUpcomingIpos, setShowUpcomingIpos] = useState(false);
   const [showBulkCheck, setShowBulkCheck] = useState(false);
   const [currentUrl, setCurrentUrl] = useState('https://iporesult.cdsc.com.np/');
@@ -56,20 +74,106 @@ export default function MainApp() {
   const [currentIPO, setCurrentIPO] = useState(null);
   const [onWebViewMessage, setOnWebViewMessage] = useState(null);
   const [useAiModel, setUseAiModel] = useState(true);
-  const [merShareModalVisible, setMerShareModalVisible] = useState(false);
   const [showBulkApply, setShowBulkApply] = useState(false);
+  const [showOpenIpos, setShowOpenIpos] = useState(false);
+  const [currentApplyIPO, setCurrentApplyIPO] = useState(null);
+
+  const closeAllScreens = () => {
+    setShowUpcomingIpos(false);
+    setShowOpenIpos(false);
+    setShowBulkCheck(false);
+    setShowAccountManager(false);
+    setShowBulkApply(false);
+    setShowMoreSidebar(false);
+  };
+
+  const getStoredGoogleUser = async () => {
+    const userData = await AsyncStorage.getItem('googleUser');
+    return userData ? JSON.parse(userData) : null;
+  };
+
+  const mergeBoids = (localBoids = [], cloudBoids = []) => {
+    const merged = Array.isArray(cloudBoids) ? [...cloudBoids] : [];
+    (Array.isArray(localBoids) ? localBoids : []).forEach((localBoid) => {
+      if (!localBoid?.boid) return;
+      const exists = merged.some((item) => item?.boid === localBoid.boid);
+      if (!exists) merged.push(localBoid);
+    });
+    return merged;
+  };
+
+  const syncBoidsForGoogleUser = useCallback(async (user, options = {}) => {
+    const googleId = user?.googleId;
+    if (!googleId) return;
+    if (!options.force && lastAutoSyncGoogleIdRef.current === googleId) return;
+    lastAutoSyncGoogleIdRef.current = googleId;
+
+    try {
+      const localData = await AsyncStorage.getItem('savedBoids');
+      const localBoids = localData ? JSON.parse(localData) : [];
+      const cloudResult = await syncFromCloud(googleId);
+      if (!cloudResult.success) return;
+
+      const cloudBoids = Array.isArray(cloudResult.boidList) ? cloudResult.boidList : [];
+      const mergedBoids = mergeBoids(localBoids, cloudBoids);
+      setSavedBoids(mergedBoids);
+      await AsyncStorage.setItem('savedBoids', JSON.stringify(mergedBoids));
+
+      if (JSON.stringify(mergedBoids) !== JSON.stringify(cloudBoids)) {
+        await syncToCloud(mergedBoids, googleId);
+      }
+    } catch (error) {
+      console.warn('Auto BOID sync failed:', error.message);
+    }
+  }, [syncFromCloud, syncToCloud]);
 
   // Load saved BOIDs
   useEffect(() => {
     (async () => {
       const data = await AsyncStorage.getItem('savedBoids');
       if (data) setSavedBoids(JSON.parse(data));
+      const googleUser = await getStoredGoogleUser();
+      if (googleUser?.googleId) {
+        await syncBoidsForGoogleUser(googleUser);
+      }
     })();
+  }, [syncBoidsForGoogleUser]);
+
+  // Check for App Updates
+  useEffect(() => {
+    fetch('https://ipo-backend-zzjb.onrender.com/api/version')
+      .then(res => res.json())
+      .then(data => {
+        const CURRENT_VERSION = '1.0.0';
+        if (data.latestVersion && data.latestVersion !== CURRENT_VERSION) {
+          Alert.alert(
+            "Update Available",
+            data.message || "A new version of the IPO App is available.",
+            [
+              { text: "Later", style: "cancel" },
+              { text: "Update Now", onPress: () => {
+                if (data.updateUrl) Linking.openURL(data.updateUrl);
+              }}
+            ]
+          );
+        }
+      })
+      .catch(err => console.log("Version check failed", err.message));
   }, []);
 
-  const saveBoidsToStorage = async (data) => {
+  const saveBoidsToStorage = async (data, options = {}) => {
     setSavedBoids(data);
     await AsyncStorage.setItem('savedBoids', JSON.stringify(data));
+    if (options.skipCloudSync) return;
+
+    try {
+      const googleUser = await getStoredGoogleUser();
+      if (googleUser?.googleId) {
+        await syncToCloud(data, googleUser.googleId);
+      }
+    } catch (error) {
+      console.warn('Auto BOID cloud backup failed:', error.message);
+    }
   };
 
   const resetForm = () => {
@@ -99,13 +203,18 @@ export default function MainApp() {
       ];
     });
     setCurrentCheckingBoid(null);
-    ToastAndroid.show('Result received', ToastAndroid.SHORT);
+    if (Platform.OS === 'android') {
+      // ToastAndroid.show('Result received', ToastAndroid.SHORT);
+    } else {
+      Toast.show({ type: 'success', text1: 'Result received' });
+    }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#333a56' }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.primary }}>
+      <StatusBar style="light" backgroundColor={COLORS.primary} />
       {/* WebView */}
-      <View style={{ flex: 1, display: showUpcomingIpos ? 'none' : 'flex', paddingBottom: 64 + insets.bottom }}>
+      <View style={{ flex: 1, display: (showUpcomingIpos || showOpenIpos || showBulkCheck || showAccountManager || showBulkApply) ? 'none' : 'flex', backgroundColor: COLORS.primary }}>
         <WebViewContainer
           ref={webViewRef}
           currentUrl={currentUrl}
@@ -129,15 +238,14 @@ export default function MainApp() {
       </View>
 
       {/* Upcoming IPOs Screen */}
-      {showUpcomingIpos && (
+      {showUpcomingIpos && !showOpenIpos && (
         <View style={{ flex: 1, paddingBottom: 80 }}>
-          <UpcomingIposScreen 
+          <UpcomingIposScreen
             onSelectIPO={(ipo) => {
               if (currentIPO?.company !== ipo.company) {
                 setResults([]);
               }
               setCurrentIPO(ipo);
-              // Open Bulk Check screen directly after selecting IPO
               setShowBulkCheck(true);
               setShowUpcomingIpos(false);
             }}
@@ -145,62 +253,45 @@ export default function MainApp() {
         </View>
       )}
 
-      {/* Bottom Navigation Bar */}
-      <View style={localStyles.bottomNavWrapper}>
-        <BottomNavBar
-          onOpenBoidModal={() => {
-            if (showUpcomingIpos) setShowUpcomingIpos(false);
-            setModalVisible(true);
-          }}
-          onOpenBulkCheck={() => {
-            if (showUpcomingIpos) setShowUpcomingIpos(false);
-            setShowBulkCheck(true);
-          }}
-          onOpenBulkApply={() => {
-            if (showUpcomingIpos) setShowUpcomingIpos(false);
-            setShowBulkApply(true);
-          }}
-          onOpenUpcomingIpos={() => setShowUpcomingIpos(!showUpcomingIpos)}
-          onOpenDeveloperInfo={() => setDeveloperVisible(true)}
-        />
-      </View>
+      {/* Live Open IPOs from MeroShare */}
+      {showOpenIpos && (
+        <View style={{ flex: 1, paddingBottom: 80 }}>
+          <OpenIposScreen
+            onApply={(ipo) => {
+              setCurrentApplyIPO(ipo);
+              setShowOpenIpos(false);
+              setShowBulkApply(true);
+            }}
+          />
+        </View>
+      )}
 
-      {/* BOID Manager Modal */}
-      <BoidModal
-        visible={modalVisible}
-        setVisible={setModalVisible}
-        boidInput={boidInput}
-        nicknameInput={nicknameInput}
-        setBoidInput={setBoidInput}
-        setNicknameInput={setNicknameInput}
-        savedBoids={savedBoids}
-        setSavedBoids={setSavedBoids}
-        editIndex={editIndex}
-        setEditIndex={setEditIndex}
-        saveBoidsToStorage={saveBoidsToStorage}
-        resetForm={resetForm}
-        webViewRef={webViewRef}
-        setResults={setResults}
-        setCurrentCheckingBoid={setCurrentCheckingBoid}
-        onOpenMerShareAccounts={() => {
-            setModalVisible(false);
-            // On Android, having two modals visible can sometimes cause one to not show.
-            // Wait for the slide-out animation to finish for a smoother transition.
-            setTimeout(() => setMerShareModalVisible(true), 600);
-          }}
-        onOpenBulkApply={() => {
-            setModalVisible(false);
-            setTimeout(() => setShowBulkApply(true), 600);
-          }}
+
+
+      {/* Account Manager Screen */}
+      <AccountManagerScreen
+        visible={showAccountManager}
+        onGoogleAccountReady={(user) => syncBoidsForGoogleUser(user, { force: true })}
+        boidProps={{
+          boidInput,
+          nicknameInput,
+          setBoidInput,
+          setNicknameInput,
+          savedBoids,
+          setSavedBoids,
+          editIndex,
+          setEditIndex,
+          saveBoidsToStorage,
+          resetForm,
+          webViewRef,
+          setResults,
+          setCurrentCheckingBoid,
+        }}
       />
 
       {/* Bulk Check Full-Screen Modal */}
-      <Modal
-        visible={showBulkCheck}
-        animationType="slide"
-        onRequestClose={() => setShowBulkCheck(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      {showBulkCheck && (
+        <View style={{ flex: 1, backgroundColor: COLORS.primary, paddingBottom: 80 }}>
           <BulkCheckPanel
             savedBoids={Array.isArray(savedBoids) ? savedBoids.filter(b => b && b.boid) : []}
             ipoName={currentIPO?.company}
@@ -215,35 +306,67 @@ export default function MainApp() {
             useAiModel={useAiModel}
             setUseAiModel={setUseAiModel}
             onClose={() => setShowBulkCheck(false)}
+            onOpenAccountManager={() => {
+              setShowBulkCheck(false);
+              setShowAccountManager(true);
+            }}
           />
         </View>
-      </Modal>
+      )}
 
-      {/* Developer Sidebar */}
-      <DeveloperSidebar
-        visible={developerVisible}
-        onClose={() => setDeveloperVisible(false)}
-        webViewRef={webViewRef}
-        onWebViewMessage={setOnWebViewMessage}
+
+      {/* More Sidebar */}
+      <MoreSidebar
+        visible={showMoreSidebar}
+        onClose={() => setShowMoreSidebar(false)}
+        onOpenBoidModal={() => {
+          closeAllScreens();
+          setShowAccountManager(true);
+        }}
+        onOpenOpenIpos={() => {
+          closeAllScreens();
+          setShowOpenIpos(true);
+        }}
+        onOpenUpcomingIpos={() => {
+          closeAllScreens();
+          setShowUpcomingIpos(true);
+        }}
       />
 
-      {/* MeroShare Account Modal */}
-      <Modal
-        visible={merShareModalVisible}
-        animationType="slide"
-        onRequestClose={() => setMerShareModalVisible(false)}
-      >
-        <MerShareAccountModal onClose={() => setMerShareModalVisible(false)} />
-      </Modal>
+
 
       {/* Bulk Apply Full-Screen Modal */}
-      <Modal
-        visible={showBulkApply}
-        animationType="slide"
-        onRequestClose={() => setShowBulkApply(false)}
-      >
-        <BulkApplyPanel onClose={() => setShowBulkApply(false)} />
-      </Modal>
+      {showBulkApply && (
+        <View style={{ flex: 1, paddingBottom: 80 }}>
+          <BulkApplyPanel initialIssue={currentApplyIPO} onClose={() => setShowBulkApply(false)} />
+        </View>
+      )}
+
+      {/* Bottom Navigation Bar */}
+      {!showMoreSidebar && (
+        <View style={localStyles.bottomNavWrapper}>
+        <BottomNavBar
+          onOpenHome={() => {
+            closeAllScreens();
+          }}
+          onOpenAccounts={() => {
+            closeAllScreens();
+            setShowAccountManager(true);
+          }}
+          onOpenBulkCheck={() => {
+            closeAllScreens();
+            setShowBulkCheck(true);
+          }}
+          onOpenBulkApply={() => {
+            closeAllScreens();
+            setShowBulkApply(true);
+          }}
+          onOpenMore={() => {
+            setShowMoreSidebar(true);
+          }}
+        />
+        </View>
+      )}
     </View>
   );
 }
@@ -254,5 +377,6 @@ const localStyles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
   },
 });
