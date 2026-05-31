@@ -43,30 +43,29 @@ export default function AccountManagerScreen({ visible, boidProps, onGoogleAccou
     return merged;
   };
 
-  const buildBackupSnapshot = (boids, accounts) => JSON.stringify({
+  const buildBackupSnapshot = useCallback((boids, accounts) => JSON.stringify({
     boids: Array.isArray(boids) ? boids : [],
     meroshareAccounts: Array.isArray(accounts) ? accounts : [],
-  });
+  }), []);
 
-  const markBackupSaved = async (googleId, accounts) => {
+  const markBackupSaved = useCallback(async (googleId, accounts) => {
     if (!googleId) return;
     await AsyncStorage.setItem(BACKUP_STATE_KEY, JSON.stringify({
       googleId,
       snapshot: buildBackupSnapshot(boidProps?.savedBoids, accounts),
     }));
     setBackupSaved(true);
-  };
+  }, [boidProps?.savedBoids, buildBackupSnapshot]);
 
   const autoSyncMeroshareAccounts = useCallback(async (user, options = {}) => {
     const googleId = user?.googleId;
     if (!googleId) return;
     if (!options.force && lastMeroshareSyncGoogleIdRef.current === googleId) return;
-    lastMeroshareSyncGoogleIdRef.current = googleId;
 
     try {
       const localAccounts = await loadMerShareAccounts();
       const cloudResult = await syncMeroshareAccountsFromCloud(googleId);
-      if (!cloudResult.success) return;
+      if (!cloudResult.success) throw new Error(cloudResult.error || 'Failed to load MeroShare cloud backup');
 
       const cloudAccounts = Array.isArray(cloudResult.accounts) ? cloudResult.accounts : [];
       const mergedAccounts = mergeMeroshareAccounts(localAccounts, cloudAccounts);
@@ -74,13 +73,33 @@ export default function AccountManagerScreen({ visible, boidProps, onGoogleAccou
       setMeroshareAccounts(mergedAccounts);
 
       if (JSON.stringify(mergedAccounts) !== JSON.stringify(cloudAccounts)) {
-        await syncMeroshareAccountsToCloud(mergedAccounts, googleId);
+        const uploadResult = await syncMeroshareAccountsToCloud(mergedAccounts, googleId);
+        if (!uploadResult.success) throw new Error(uploadResult.error || 'Failed to save MeroShare backup');
       }
       await markBackupSaved(googleId, mergedAccounts);
+      lastMeroshareSyncGoogleIdRef.current = googleId;
     } catch (error) {
       console.warn('Auto MeroShare sync failed:', error.message);
+      Toast.show({ type: 'error', text1: 'MeroShare backup failed', text2: error.message });
     }
-  }, [boidProps?.savedBoids, syncMeroshareAccountsFromCloud, syncMeroshareAccountsToCloud]);
+  }, [markBackupSaved, syncMeroshareAccountsFromCloud, syncMeroshareAccountsToCloud]);
+
+  const syncAllAccountDataToCloud = useCallback(async (user) => {
+    const googleId = user?.googleId;
+    if (!googleId) return;
+
+    const boids = Array.isArray(boidProps?.savedBoids) ? boidProps.savedBoids : [];
+    const latestMeroshareAccounts = await loadMerShareAccounts();
+
+    const boidResult = await syncToCloud(boids, googleId);
+    if (!boidResult.success) throw new Error(boidResult.error || 'Failed to save BOID backup');
+
+    const meroshareResult = await syncMeroshareAccountsToCloud(latestMeroshareAccounts, googleId);
+    if (!meroshareResult.success) throw new Error(meroshareResult.error || 'Failed to save MeroShare backup');
+
+    setMeroshareAccounts(latestMeroshareAccounts);
+    await markBackupSaved(googleId, latestMeroshareAccounts);
+  }, [boidProps?.savedBoids, markBackupSaved, syncMeroshareAccountsToCloud, syncToCloud]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -134,6 +153,25 @@ export default function AccountManagerScreen({ visible, boidProps, onGoogleAccou
     }
   };
 
+  const handleMeroshareAccountsPersisted = useCallback(async (accounts) => {
+    setMeroshareAccounts(accounts);
+    setBackupSaved(false);
+
+    if (!googleUser?.googleId) return;
+
+    const result = await syncMeroshareAccountsToCloud(accounts, googleUser.googleId);
+    if (result.success) {
+      await markBackupSaved(googleUser.googleId, accounts);
+      return;
+    }
+
+    Toast.show({
+      type: 'error',
+      text1: 'MeroShare backup failed',
+      text2: result.error || 'Please tap Backup to try again.',
+    });
+  }, [googleUser?.googleId, markBackupSaved, syncMeroshareAccountsToCloud]);
+
   const wrappedBoidProps = useMemo(() => ({
     ...boidProps,
     setSavedBoids: (value) => {
@@ -184,16 +222,25 @@ export default function AccountManagerScreen({ visible, boidProps, onGoogleAccou
         {/* Expandable Backup Section */}
         {showBackupSection && (
           <View style={styles.backupCard}>
+            <TouchableOpacity onPress={() => setShowBackupSection(false)} style={styles.backupCloseButton}>
+              <Ionicons name="close" size={18} color={COLORS.text} />
+            </TouchableOpacity>
             <Text style={styles.backupCardTitle}>☁️ Cloud Backup</Text>
             <Text style={styles.backupCardDesc}>
               Sign in with Google to securely back up your BOIDs and MeroShare credentials. Data is encrypted before upload.
             </Text>
             <GoogleSignIn
-              onSignInSuccess={(user) => {
-                setGoogleUser(user);
-                setBackupSaved(false);
-                onGoogleAccountReady?.(user);
-                autoSyncMeroshareAccounts(user, { force: true });
+              onSignInSuccess={async (user) => {
+                try {
+                  setGoogleUser(user);
+                  setBackupSaved(false);
+                  onGoogleAccountReady?.(user);
+                  await autoSyncMeroshareAccounts(user, { force: true });
+                  await syncAllAccountDataToCloud(user);
+                  Toast.show({ type: 'success', text1: 'Backup saved', text2: 'BOIDs and MeroShare accounts are saved to cloud.' });
+                } catch (error) {
+                  Toast.show({ type: 'error', text1: 'Backup failed', text2: error.message });
+                }
               }}
               onSignOut={() => { setGoogleUser(null); setBackupSaved(false); }}
               buttonText="Sign in with Google"
@@ -252,14 +299,7 @@ export default function AccountManagerScreen({ visible, boidProps, onGoogleAccou
             onAccountsChange={(accounts) => {
               setMeroshareAccounts(accounts);
             }}
-            onAccountsPersisted={async (accounts) => {
-              setMeroshareAccounts(accounts);
-              setBackupSaved(false);
-              if (googleUser?.googleId) {
-                const result = await syncMeroshareAccountsToCloud(accounts, googleUser.googleId);
-                if (result.success) await markBackupSaved(googleUser.googleId, accounts);
-              }
-            }}
+            onAccountsPersisted={handleMeroshareAccountsPersisted}
           />
         )}
       </View>
@@ -329,6 +369,20 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  backupCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    zIndex: 2,
   },
   backupCardTitle: {
     fontSize: 14,

@@ -22,6 +22,20 @@ import { useBoidSync } from '../hooks/useBoidSync';
 
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
+const CURRENT_VERSION = '1.0.10';
+const CURRENT_VERSION_CODE = 20;
+
+const compareVersionNames = (left = '0.0.0', right = '0.0.0') => {
+  const a = String(left).split('.').map(part => parseInt(part, 10) || 0);
+  const b = String(right).split('.').map(part => parseInt(part, 10) || 0);
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return 1;
+    if ((a[i] || 0) < (b[i] || 0)) return -1;
+  }
+  return 0;
+};
+
 export default function MainApp() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
@@ -141,11 +155,14 @@ export default function MainApp() {
 
   // Check for App Updates
   useEffect(() => {
-    fetch('https://ipo-backend-zzjb.onrender.com/api/version')
+    fetch(`${getApiBaseUrl()}/version`)
       .then(res => res.json())
       .then(data => {
-        const CURRENT_VERSION = '1.0.0';
-        if (data.latestVersion && data.latestVersion !== CURRENT_VERSION) {
+        const latestVersionCode = parseInt(data.latestVersionCode, 10);
+        const hasNewVersionCode = latestVersionCode && latestVersionCode > CURRENT_VERSION_CODE;
+        const hasNewVersionName = data.latestVersion && compareVersionNames(data.latestVersion, CURRENT_VERSION) > 0;
+
+        if (hasNewVersionCode || hasNewVersionName) {
           Alert.alert(
             "Update Available",
             data.message || "A new version of the IPO App is available.",

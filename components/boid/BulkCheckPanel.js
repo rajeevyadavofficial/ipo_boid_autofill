@@ -27,7 +27,6 @@ import {
 } from '../../utils/BulkCheckStrategy';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getApiBaseUrl } from '../../utils/config';
@@ -216,6 +215,10 @@ export default function BulkCheckPanel({
     }
 
     for (let i = 0; i < finalTargetBoids.length; i++) {
+      if (i > 0) {
+        await sleep(Math.floor(Math.random() * 1000));
+      }
+
       const boidObj = finalTargetBoids[i];
       const boidString = typeof boidObj === 'string' ? boidObj : boidObj.boid;
       // Clear previous captcha image when starting new BOID
@@ -258,10 +261,6 @@ export default function BulkCheckPanel({
 
           // STEP 2: Solve (AI or Manual)
           if (activeAiModel) {
-            // Add a small random jitter (0-2s) to stagger requests if many users are checking
-            const jitter = Math.floor(Math.random() * 2000);
-            if (i > 0) await sleep(jitter);
-
             try {
               const formData = new FormData();
               formData.append('image', {
@@ -424,11 +423,6 @@ export default function BulkCheckPanel({
         }
       }
 
-      // Pacing delay (respecting rate limits)
-      if (i < finalTargetBoids.length - 1) {
-        const delay = 1000;
-        await sleep(delay);
-      }
     }
 
     setBulkCheckState(prev => ({ ...prev, progress: 100, currentCheckingBoid: '', currentCheckingNickname: '' }));
@@ -534,36 +528,6 @@ export default function BulkCheckPanel({
       });
     } finally {
       setIsSharing(false);
-    }
-  };
-
-  const handleSaveToLibrary = async () => {
-    try {
-      if (!capturedImageUri) return;
-
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Toast.show({
-          type: 'error',
-          text1: 'Permission Denied',
-          text2: 'Gallery access is required to save results'
-        });
-        return;
-      }
-
-      await MediaLibrary.saveToLibraryAsync(capturedImageUri);
-      Toast.show({
-        type: 'success',
-        text1: 'Saved to Gallery',
-        text2: 'IPO Result image has been saved'
-      });
-    } catch (err) {
-      console.error('Save error:', err);
-      Toast.show({
-        type: 'error',
-        text1: 'Save Failed',
-        text2: err.message
-      });
     }
   };
 
@@ -727,6 +691,7 @@ export default function BulkCheckPanel({
   const hasCheckResults = bulkCheckState.results.length > 0;
   const isCheckComplete = hasCheckResults && !isCheckingActive && bulkCheckState.results.every(item => item.status !== 'pending');
   const isBulkCheckRunning = hasCheckResults && !isCheckComplete;
+  const selectedBoidCount = Array.from(enabledBoids.values()).filter(Boolean).length;
 
 
   return (
@@ -808,6 +773,20 @@ export default function BulkCheckPanel({
                       : `${savedBoids.length} saved accounts`}
                 </Text>
               </View>
+              {savedBoids.length > 3 && !isCheckComplete && (
+                <TouchableOpacity
+                  style={[
+                    panelStyles.headerBulkCheckButton,
+                    (savedBoids.length === 0 || selectedBoidCount === 0 || isBulkCheckRunning) && panelStyles.headerBulkCheckButtonDisabled,
+                  ]}
+                  onPress={() => handleBulkCheck()}
+                  disabled={savedBoids.length === 0 || selectedBoidCount === 0 || isBulkCheckRunning}
+                >
+                  <Text style={panelStyles.headerBulkCheckButtonText}>
+                    {isBulkCheckRunning ? `${Math.round(bulkCheckState.progress)}%` : `Start (${selectedBoidCount})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
               {hasCheckResults && (
                 <View style={panelStyles.resultMiniStats}>
                   <View style={[panelStyles.resultMiniPill, panelStyles.resultMiniPillSuccess]}>
@@ -985,15 +964,15 @@ export default function BulkCheckPanel({
               <TouchableOpacity
                 style={[
                   panelStyles.bulkCheckButton,
-                  (savedBoids.length === 0 || Array.from(enabledBoids.values()).filter(v => v).length === 0 || isBulkCheckRunning) && panelStyles.bulkCheckButtonDisabled,
+                  (savedBoids.length === 0 || selectedBoidCount === 0 || isBulkCheckRunning) && panelStyles.bulkCheckButtonDisabled,
                 ]}
                 onPress={() => handleBulkCheck()}
-                disabled={savedBoids.length === 0 || Array.from(enabledBoids.values()).filter(v => v).length === 0 || isBulkCheckRunning}
+                disabled={savedBoids.length === 0 || selectedBoidCount === 0 || isBulkCheckRunning}
               >
                 <Text style={panelStyles.bulkCheckText}>
                   {isBulkCheckRunning
                     ? `Checking ${Math.round(bulkCheckState.progress)}%`
-                    : `Start Bulk Check (${Array.from(enabledBoids.values()).filter(v => v).length})`}
+                    : `Start Bulk Check (${selectedBoidCount})`}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1432,11 +1411,6 @@ export default function BulkCheckPanel({
                   )}
 
                   <View style={panelStyles.popupActions}>
-                     <TouchableOpacity style={panelStyles.popupBtnDownload} onPress={handleSaveToLibrary}>
-                       <Ionicons name="download-outline" size={20} color={COLORS.accent} />
-                       <Text style={panelStyles.popupBtnDownloadText}>Save</Text>
-                     </TouchableOpacity>
-
                      <TouchableOpacity style={panelStyles.popupBtnShare} onPress={handleShareResult} disabled={isSharing}>
                        <Ionicons name="logo-whatsapp" size={18} color="white" />
                        <Text style={panelStyles.popupBtnShareText}>Share</Text>
@@ -1866,6 +1840,26 @@ const panelStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.mutedText,
+  },
+  headerBulkCheckButton: {
+    minHeight: 38,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  headerBulkCheckButtonDisabled: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    opacity: 0.55,
+  },
+  headerBulkCheckButtonText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
   },
   resultMiniStats: {
     flexDirection: 'row',

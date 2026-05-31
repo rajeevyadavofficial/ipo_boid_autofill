@@ -38,7 +38,9 @@ export default function BoidListItem({
     <TouchableOpacity
       style={styles.boidCard}
       activeOpacity={0.7}
-      onPress={() => fillBoid(item.boid, index)}
+      onPress={() => {
+        if (typeof fillBoid === 'function') fillBoid(item.boid, index);
+      }}
     >
       {/* Main content */}
       <View style={{ flex: 1 }}>

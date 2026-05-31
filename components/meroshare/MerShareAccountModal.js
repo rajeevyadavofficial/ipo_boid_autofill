@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { getApiBaseUrl } from '../../utils/config';
-import { MeroShareApi } from '../../services/meroShareApi';
 import AccountDashboardModal from './AccountDashboardModal';
 import { COLORS } from '../../utils/theme';
 
@@ -179,6 +178,7 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
   const [showPassword, setShowPassword] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState(null); // null, 'verifying', 'success', 'error'
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     loadMerShareAccounts().then(setAccounts);
@@ -218,6 +218,7 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
     setShowPassword(false);
     setShowPin(false);
     setVerificationStatus(null);
+    setIsVerifying(false);
   };
 
   const handleSave = async () => {
@@ -235,27 +236,31 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
       return;
     }
 
-    setDpLoading(true); // Reuse loading state for validation
+    setIsVerifying(true);
     setVerificationStatus('verifying');
     console.log('🚀 [Save] Starting verification for:', form.username);
 
     try {
-      // Auto-verify credentials before saving using direct API
-      const token = await MeroShareApi.login(parseInt(form.dpId), cleanUsername, cleanPassword);
+      const response = await fetch(`${getApiBaseUrl()}/meroshare/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: parseInt(form.dpId),
+          username: cleanUsername,
+          password: cleanPassword,
+        }),
+      });
+      const verification = await response.json();
 
-      if (!token) {
-        setDpLoading(false);
+      if (!response.ok || !verification.success) {
         setVerificationStatus('error');
         Toast.show({
           type: 'error',
           text1: 'Verification Failed',
-          text2: 'Please check your DP, Username and Password.'
+          text2: verification.error || 'Please check your DP, Username and Password.'
         });
         return;
       }
-
-      // Logout after verification
-      await MeroShareApi.logout(token);
 
       // Success branch
       setVerificationStatus('success');
@@ -276,7 +281,7 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
 
       await saveMerShareAccounts(updated);
       setAccounts(updated);
-      onAccountsPersisted?.(updated);
+      await onAccountsPersisted?.(updated);
 
       // Brief delay to let user see "Verified" status
       setTimeout(() => {
@@ -291,10 +296,10 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
       Toast.show({
         type: 'error',
         text1: 'Connection Error',
-        text2: 'Server is waking up or connection failed. Please try again in 10 seconds.'
+        text2: err.message || 'Verification failed. Please try again.'
       });
     } finally {
-      setDpLoading(false);
+      setIsVerifying(false);
     }
   };
 
@@ -317,7 +322,7 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
     const updated = accounts.filter((_, i) => i !== index);
     await saveMerShareAccounts(updated);
     setAccounts(updated);
-    onAccountsPersisted?.(updated);
+    await onAccountsPersisted?.(updated);
     Toast.show({ type: 'success', text1: 'Account removed' });
   };
 
@@ -442,9 +447,9 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
                   <Text style={{ color: '#333', fontWeight: '600' }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.btn, { backgroundColor: COLORS.accent, flex: 2, opacity: dpLoading ? 0.7 : 1 }]}
+                  style={[styles.btn, { backgroundColor: COLORS.accent, flex: 2, opacity: isVerifying ? 0.7 : 1 }]}
                   onPress={handleSave}
-                  disabled={dpLoading || verificationStatus === 'success'}
+                  disabled={isVerifying || verificationStatus === 'success'}
                 >
                   <Text style={{ color: '#fff', fontWeight: '700' }}>
                     {verificationStatus === 'verifying' ? 'Verifying...' :
@@ -463,9 +468,9 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
               keyboardShouldPersistTaps="handled"
             >
               {accounts.length > 0 && (
-                <View style={[styles.securityAlert, { backgroundColor: '#F1F8E9', borderLeftColor: '#4CAF50' }]}>
-                  <Ionicons name="lock-closed" size={20} color="#4CAF50" />
-                  <Text style={[styles.securityAlertText, { color: '#1B5E20' }]}>
+                <View style={styles.securityAlert}>
+                  <Ionicons name="lock-closed" size={20} color={COLORS.accent} />
+                  <Text style={styles.securityAlertText}>
                     All saved accounts are encrypted and verified. Only you can access your credentials.
                   </Text>
                 </View>

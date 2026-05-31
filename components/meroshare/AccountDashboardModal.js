@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MeroShareApi } from '../../services/meroShareApi';
-import { getApiBaseUrl } from '../../utils/config';
+import { COLORS } from '../../utils/theme';
 
 // Simple base64 decode
 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -63,8 +63,8 @@ export default function AccountDashboardModal({ account, onClose }) {
       navigationBarTranslucent
     >
       <View style={styles.root}>
-        <StatusBar style="light" backgroundColor="#333a56" />
-        <View style={{ height: insets.top, backgroundColor: '#333a56' }} />
+        <StatusBar style="light" backgroundColor={COLORS.primary} />
+        <View style={{ height: insets.top, backgroundColor: COLORS.primary }} />
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerAvatar}>
@@ -77,10 +77,10 @@ export default function AccountDashboardModal({ account, onClose }) {
             <Text style={styles.headerSub}>{account.dpName}</Text>
           </View>
           <TouchableOpacity onPress={loadData} style={styles.refreshBtn}>
-            <Ionicons name="refresh" size={20} color="#7ee787" />
+            <Ionicons name="refresh" size={20} color={COLORS.text} />
           </TouchableOpacity>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={22} color="#c9d1d9" />
+            <Ionicons name="close" size={22} color={COLORS.text} />
           </TouchableOpacity>
         </View>
 
@@ -93,7 +93,7 @@ export default function AccountDashboardModal({ account, onClose }) {
                 style={[styles.tab, activeTab === i && styles.tabActive]}
                 onPress={() => setActiveTab(i)}
               >
-                <Ionicons name={TAB_ICONS[i]} size={16} color={activeTab === i ? '#58a6ff' : '#8b949e'} />
+                <Ionicons name={TAB_ICONS[i]} size={16} color={activeTab === i ? COLORS.text : COLORS.mutedText} />
                 <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>{tab}</Text>
               </TouchableOpacity>
             ))}
@@ -103,13 +103,13 @@ export default function AccountDashboardModal({ account, onClose }) {
         {/* Content */}
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color="#58a6ff" />
+            <ActivityIndicator size="large" color={COLORS.accent} />
             <Text style={styles.loadingText}>Fetching account data...</Text>
             <Text style={styles.loadingSubText}>This may take a few seconds</Text>
           </View>
         ) : error ? (
           <View style={styles.center}>
-            <Ionicons name="alert-circle" size={48} color="#ff7b72" />
+            <Ionicons name="alert-circle" size={48} color="#F44336" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity style={styles.retryBtn} onPress={loadData}>
               <Text style={styles.retryText}>Retry</Text>
@@ -164,9 +164,9 @@ function PortfolioTab({ data }) {
     <View>
       {/* Summary cards */}
       <View style={styles.summaryRow}>
-        <StatCard label="Holdings" value={shares.length} color="#58a6ff" />
-        <StatCard label="Gain/Loss" value={pnl >= 0 ? `+${fmt(pnl)}` : fmt(pnl)} color={pnl >= 0 ? '#7ee787' : '#ff7b72'} />
-        <StatCard label="Current Value" value={`रू${fmt(totalValue)}`} color="#e3b341" />
+        <StatCard label="Holdings" value={shares.length} color={COLORS.accent} />
+        <StatCard label="Gain/Loss" value={pnl >= 0 ? `+${fmt(pnl)}` : fmt(pnl)} color={pnl >= 0 ? '#4CAF50' : '#F44336'} />
+        <StatCard label="Current Value" value={`रू${fmt(totalValue)}`} color={COLORS.accent} />
       </View>
 
       {shares.length === 0 ? (
@@ -201,7 +201,7 @@ function PortfolioTab({ data }) {
                 <Text style={styles.txnDate}>{t.transactionDate || t.date}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.txnType, { color: t.transactionType === 'DR' ? '#ff7b72' : '#7ee787' }]}>
+                <Text style={[styles.txnType, { color: t.transactionType === 'DR' ? '#F44336' : '#4CAF50' }]}>
                   {t.transactionType} {t.quantity}
                 </Text>
                 <Text style={styles.txnRate}>@ रू{t.rate}</Text>
@@ -215,14 +215,14 @@ function PortfolioTab({ data }) {
 }
 
 function SuccessBar({ rate }) {
-  const color = rate >= 70 ? '#7ee787' : rate >= 40 ? '#e3b341' : '#ff7b72';
+  const color = rate >= 70 ? '#4CAF50' : rate >= 40 ? COLORS.accent : '#F44336';
   return (
     <View style={{ marginVertical: 12 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-        <Text style={{ color: '#8b949e', fontSize: 12, fontWeight: '600' }}>Allotment Success Rate</Text>
+        <Text style={{ color: COLORS.mutedText, fontSize: 12, fontWeight: '600' }}>Allotment Success Rate</Text>
         <Text style={{ color, fontSize: 14, fontWeight: '800' }}>{rate}%</Text>
       </View>
-      <View style={{ height: 8, backgroundColor: '#21262d', borderRadius: 4, overflow: 'hidden' }}>
+      <View style={{ height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
         <View style={{ height: '100%', width: `${rate}%`, backgroundColor: color, borderRadius: 4 }} />
       </View>
     </View>
@@ -238,11 +238,11 @@ function ApplicationsTab({ data }) {
 
   const getCatStyle = (cat) => {
     switch(cat) {
-      case 'allotted':    return { color: '#7ee787', label: 'Allotted', icon: 'checkmark-circle' };
-      case 'not_allotted': return { color: '#ff7b72', label: 'Not Allotted', icon: 'close-circle' };
-      case 'bank_failed':  return { color: '#ff7b72', label: 'Bank Failed', icon: 'alert-circle' };
-      case 'pending':     return { color: '#e3b341', label: 'Pending', icon: 'time' };
-      default:            return { color: '#8b949e', label: cat, icon: 'help-circle' };
+      case 'allotted':    return { color: '#4CAF50', label: 'Allotted', icon: 'checkmark-circle' };
+      case 'not_allotted': return { color: '#F44336', label: 'Not Allotted', icon: 'close-circle' };
+      case 'bank_failed':  return { color: '#F44336', label: 'Bank Failed', icon: 'alert-circle' };
+      case 'pending':     return { color: COLORS.accent, label: 'Pending', icon: 'time' };
+      default:            return { color: COLORS.mutedText, label: cat, icon: 'help-circle' };
     }
   };
 
@@ -259,21 +259,21 @@ function ApplicationsTab({ data }) {
       )}
 
       <View style={styles.summaryRow}>
-        <StatCard label="Total Applied" value={stats.total} color="#58a6ff" />
-        <StatCard label="Allotted" value={stats.allotted} color="#7ee787" />
-        <StatCard label="Not Allotted" value={stats.notAllotted} color="#ff7b72" />
+        <StatCard label="Total Applied" value={stats.total} color={COLORS.accent} />
+        <StatCard label="Allotted" value={stats.allotted} color="#4CAF50" />
+        <StatCard label="Not Allotted" value={stats.notAllotted} color="#F44336" />
       </View>
 
       <View style={[styles.infoCard, { padding: 12 }]}>
         <SuccessBar rate={stats.successRate} />
         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 5 }}>
           <View style={{ alignItems: 'center' }}>
-            <Text style={{ color: '#e3b341', fontWeight: '800', fontSize: 16 }}>{stats.pending}</Text>
-            <Text style={{ color: '#8b949e', fontSize: 10 }}>Pending</Text>
+            <Text style={{ color: COLORS.accent, fontWeight: '800', fontSize: 16 }}>{stats.pending}</Text>
+            <Text style={{ color: COLORS.mutedText, fontSize: 10 }}>Pending</Text>
           </View>
           <View style={{ alignItems: 'center' }}>
-            <Text style={{ color: '#ff7b72', fontWeight: '800', fontSize: 16 }}>{stats.bankFailed}</Text>
-            <Text style={{ color: '#8b949e', fontSize: 10 }}>Bank Failed</Text>
+            <Text style={{ color: '#F44336', fontWeight: '800', fontSize: 16 }}>{stats.bankFailed}</Text>
+            <Text style={{ color: COLORS.mutedText, fontSize: 10 }}>Bank Failed</Text>
           </View>
         </View>
       </View>
@@ -290,7 +290,7 @@ function ApplicationsTab({ data }) {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.appScript}>{a.scrip}</Text>
                   <Text style={styles.appCompany} numberOfLines={1}>{a.companyName}</Text>
-                  <Text style={{ color: '#8b949e', fontSize: 11, marginTop: 2 }}>
+                  <Text style={{ color: COLORS.mutedText, fontSize: 11, marginTop: 2 }}>
                     Status: {a.statusName} {a.remark ? ` • ${a.remark}` : ''}
                   </Text>
                 </View>
@@ -361,15 +361,15 @@ function RawDataTab({ data }) {
                 <Text style={styles.rawKey}>{key}</Text>
                 <Text style={styles.rawSize}>{isNull ? 'null / failed' : isError ? 'error' : sizes[i]}</Text>
               </View>
-              <View style={[styles.rawBadge, { backgroundColor: isNull || isError ? '#ff7b7222' : '#7ee78722' }]}>
-                <Text style={{ color: isNull || isError ? '#ff7b72' : '#7ee787', fontSize: 10, fontWeight: '700' }}>
+              <View style={[styles.rawBadge, { backgroundColor: isNull || isError ? 'rgba(244,67,54,0.16)' : 'rgba(76,175,80,0.16)' }]}>
+                <Text style={{ color: isNull || isError ? '#F44336' : '#4CAF50', fontSize: 10, fontWeight: '700' }}>
                   {isNull || isError ? '✗' : '✓'}
                 </Text>
               </View>
               <Ionicons
                 name={isOpen ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color="#8b949e"
+                color={COLORS.mutedText}
                 style={{ marginLeft: 8 }}
               />
             </TouchableOpacity>
@@ -397,7 +397,7 @@ function RawDataTab({ data }) {
 function SectionHeader({ icon, title }) {
   return (
     <View style={styles.sectionHeader}>
-      <Ionicons name={icon} size={16} color="#58a6ff" style={{ marginRight: 8 }} />
+      <Ionicons name={icon} size={16} color={COLORS.accent} style={{ marginRight: 8 }} />
       <Text style={styles.sectionTitle}>{title}</Text>
     </View>
   );
@@ -428,7 +428,7 @@ function StatCard({ label, value, color }) {
 function EmptyState({ icon, text }) {
   return (
     <View style={styles.empty}>
-      <Ionicons name={icon} size={48} color="#30363d" />
+      <Ionicons name={icon} size={48} color={COLORS.border} />
       <Text style={styles.emptyText}>{text}</Text>
     </View>
   );
@@ -442,62 +442,62 @@ const fmt = (n) => {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0d1117' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#21262d', backgroundColor: '#161b22' },
-  headerAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#388bfd26', borderWidth: 1, borderColor: '#58a6ff66', justifyContent: 'center', alignItems: 'center' },
-  headerAvatarText: { color: '#58a6ff', fontWeight: 'bold', fontSize: 18 },
-  headerName: { color: '#e6edf3', fontWeight: '700', fontSize: 16 },
-  headerSub: { color: '#8b949e', fontSize: 12, marginTop: 2 },
-  refreshBtn: { padding: 8, backgroundColor: '#7ee78726', borderRadius: 20, marginRight: 8 },
-  closeBtn: { padding: 8, backgroundColor: '#21262d', borderRadius: 20 },
-  tabBarWrapper: { backgroundColor: '#161b22', borderBottomWidth: 1, borderBottomColor: '#21262d' },
+  root: { flex: 1, backgroundColor: COLORS.primary },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.surface },
+  headerAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.accent, borderWidth: 1, borderColor: COLORS.border, justifyContent: 'center', alignItems: 'center' },
+  headerAvatarText: { color: COLORS.text, fontWeight: 'bold', fontSize: 18 },
+  headerName: { color: COLORS.text, fontWeight: '700', fontSize: 16 },
+  headerSub: { color: COLORS.mutedText, fontSize: 12, marginTop: 2 },
+  refreshBtn: { padding: 8, backgroundColor: COLORS.accent, borderRadius: 20, marginRight: 8 },
+  closeBtn: { padding: 8, backgroundColor: COLORS.primary, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border },
+  tabBarWrapper: { backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   tabBar: { flexDirection: 'row', paddingHorizontal: 8 },
   tab: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, paddingHorizontal: 16 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#58a6ff' },
-  tabText: { fontSize: 11, color: '#8b949e', fontWeight: '600' },
-  tabTextActive: { color: '#58a6ff' },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: COLORS.accent },
+  tabText: { fontSize: 11, color: COLORS.mutedText, fontWeight: '600' },
+  tabTextActive: { color: COLORS.text },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  loadingText: { color: '#e6edf3', marginTop: 16, fontSize: 15, fontWeight: '600' },
-  loadingSubText: { color: '#8b949e', marginTop: 4, fontSize: 12 },
-  errorText: { color: '#ff7b72', marginTop: 12, textAlign: 'center', fontSize: 14 },
-  retryBtn: { marginTop: 16, backgroundColor: '#388bfd26', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10, borderWidth: 1, borderColor: '#58a6ff66' },
-  retryText: { color: '#58a6ff', fontWeight: '700' },
+  loadingText: { color: COLORS.text, marginTop: 16, fontSize: 15, fontWeight: '600' },
+  loadingSubText: { color: COLORS.mutedText, marginTop: 4, fontSize: 12 },
+  errorText: { color: '#F44336', marginTop: 12, textAlign: 'center', fontSize: 14 },
+  retryBtn: { marginTop: 16, backgroundColor: COLORS.accent, borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.border },
+  retryText: { color: COLORS.text, fontWeight: '700' },
   summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  statCard: { flex: 1, backgroundColor: '#161b22', borderRadius: 10, padding: 14, borderTopWidth: 2, alignItems: 'center' },
+  statCard: { flex: 1, backgroundColor: COLORS.surface, borderRadius: 10, padding: 14, borderTopWidth: 2, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
   statValue: { fontSize: 18, fontWeight: '900' },
-  statLabel: { color: '#8b949e', fontSize: 11, marginTop: 4 },
+  statLabel: { color: COLORS.mutedText, fontSize: 11, marginTop: 4 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 16, marginBottom: 8 },
-  sectionTitle: { color: '#58a6ff', fontWeight: '700', fontSize: 14, letterSpacing: 0.5 },
-  infoCard: { backgroundColor: '#161b22', borderRadius: 10, borderWidth: 1, borderColor: '#21262d', overflow: 'hidden', marginBottom: 8 },
+  sectionTitle: { color: COLORS.text, fontWeight: '700', fontSize: 14, letterSpacing: 0.5 },
+  infoCard: { backgroundColor: COLORS.surface, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 8 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
-  infoRowBorder: { borderBottomWidth: 1, borderBottomColor: '#21262d' },
-  infoLabel: { color: '#8b949e', fontSize: 13 },
-  infoValue: { color: '#e6edf3', fontSize: 13, fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
-  shareCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#161b22', borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#21262d' },
-  shareScrip: { color: '#7ee787', fontWeight: '800', fontSize: 14 },
-  shareCompany: { color: '#8b949e', fontSize: 11, marginTop: 2 },
-  shareQty: { color: '#e6edf3', fontWeight: '700', fontSize: 13 },
-  shareValue: { color: '#e3b341', fontSize: 12, marginTop: 2 },
-  txnRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#21262d' },
-  txnScript: { color: '#e6edf3', fontWeight: '600', fontSize: 13 },
-  txnDate: { color: '#8b949e', fontSize: 11, marginTop: 2 },
+  infoRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  infoLabel: { color: COLORS.mutedText, fontSize: 13 },
+  infoValue: { color: COLORS.text, fontSize: 13, fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
+  shareCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: COLORS.border },
+  shareScrip: { color: COLORS.text, fontWeight: '800', fontSize: 14 },
+  shareCompany: { color: COLORS.mutedText, fontSize: 11, marginTop: 2 },
+  shareQty: { color: COLORS.text, fontWeight: '700', fontSize: 13 },
+  shareValue: { color: COLORS.accent, fontSize: 12, marginTop: 2 },
+  txnRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  txnScript: { color: COLORS.text, fontWeight: '600', fontSize: 13 },
+  txnDate: { color: COLORS.mutedText, fontSize: 11, marginTop: 2 },
   txnType: { fontWeight: '700', fontSize: 13 },
-  txnRate: { color: '#8b949e', fontSize: 11, marginTop: 2 },
-  appCard: { flexDirection: 'row', backgroundColor: '#161b22', borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#21262d' },
-  appScript: { color: '#58a6ff', fontWeight: '800', fontSize: 14 },
-  appCompany: { color: '#8b949e', fontSize: 11, marginTop: 1 },
-  appDate: { color: '#8b949e', fontSize: 11, marginTop: 2 },
-  appKitta: { color: '#e6edf3', fontWeight: '700', fontSize: 13, marginBottom: 4 },
+  txnRate: { color: COLORS.mutedText, fontSize: 11, marginTop: 2 },
+  appCard: { flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: COLORS.border },
+  appScript: { color: COLORS.text, fontWeight: '800', fontSize: 14 },
+  appCompany: { color: COLORS.mutedText, fontSize: 11, marginTop: 1 },
+  appDate: { color: COLORS.mutedText, fontSize: 11, marginTop: 2 },
+  appKitta: { color: COLORS.text, fontWeight: '700', fontSize: 13, marginBottom: 4 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   statusText: { fontSize: 10, fontWeight: '700' },
   empty: { alignItems: 'center', paddingVertical: 60 },
-  emptyText: { color: '#8b949e', marginTop: 12, fontSize: 14 },
+  emptyText: { color: COLORS.mutedText, marginTop: 12, fontSize: 14 },
   // Raw JSON tab
-  rawSection: { borderWidth: 1, borderColor: '#21262d', borderRadius: 10, marginBottom: 10, overflow: 'hidden' },
-  rawHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#161b22', paddingHorizontal: 14, paddingVertical: 12 },
-  rawKey: { color: '#79c0ff', fontWeight: '700', fontSize: 14, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier' },
-  rawSize: { color: '#8b949e', fontSize: 11, marginTop: 2 },
+  rawSection: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, marginBottom: 10, overflow: 'hidden' },
+  rawHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, paddingHorizontal: 14, paddingVertical: 12 },
+  rawKey: { color: COLORS.text, fontWeight: '700', fontSize: 14, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier' },
+  rawSize: { color: COLORS.mutedText, fontSize: 11, marginTop: 2 },
   rawBadge: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  rawBody: { maxHeight: 300, backgroundColor: '#0d1117' },
-  rawJson: { color: '#c9d1d9', fontSize: 11, padding: 12, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', lineHeight: 18 },
+  rawBody: { maxHeight: 300, backgroundColor: COLORS.primary },
+  rawJson: { color: COLORS.text, fontSize: 11, padding: 12, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', lineHeight: 18 },
 });

@@ -71,9 +71,17 @@ export default function useBoidModal({
   };
 
   const checkBoidResult = (boid, index) => {
-    setCurrentCheckingBoid({
+    if (!webViewRef?.current?.injectJavaScript) {
+      ToastAndroid.show(
+        'Open Home or Bulk Check to fill this BOID.',
+        ToastAndroid.SHORT
+      );
+      return;
+    }
+
+    setCurrentCheckingBoid?.({
       boid,
-      nickname: savedBoids[index].nickname,
+      nickname: savedBoids[index]?.nickname,
     });
 
     const script = `
@@ -88,7 +96,7 @@ export default function useBoidModal({
       'BOID filled. Now solve CAPTCHA and tap "View Result".',
       ToastAndroid.LONG
     );
-    setVisible(false);
+    setVisible?.(false);
   };
 
   const deleteBoid = (index) => {

@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { getApiBaseUrl } from '../utils/config';
 
 const WEB_BACKEND_BASE = 'https://webbackend.cdsc.com.np/api';
@@ -6,10 +5,6 @@ const WEB_BACKEND_BASE = 'https://webbackend.cdsc.com.np/api';
 // Helper for fetching through proxy on web to bypass CORS
 // Returns a response-like object with .ok, .status, .json(), and .headers.get()
 const proxyFetch = async (url, options = {}) => {
-  if (Platform.OS !== 'web') {
-    return fetch(url, options);
-  }
-
   try {
     const proxyUrl = `${getApiBaseUrl()}/proxy`;
     console.log(`🌐 [Web] Proxying: ${options.method || 'GET'} ${url}`);

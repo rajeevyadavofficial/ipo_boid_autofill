@@ -90,7 +90,6 @@ export default function MoreSidebar({ visible, onClose, onOpenBoidModal, onOpenO
       items: [
         { label: 'Support', icon: 'heart', family: 'fontawesome', onPress: () => setShowDonate(v => !v), active: showDonate },
         { label: 'Feedback', icon: 'chatbubbles', onPress: () => setShowFeedback(v => !v), active: showFeedback },
-        { label: 'Developer', icon: 'person-circle', onPress: () => Linking.openURL('https://github.com/rajeevyadav-official') },
       ],
     },
   ];

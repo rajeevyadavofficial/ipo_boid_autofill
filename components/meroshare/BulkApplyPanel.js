@@ -207,115 +207,66 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
 
     setIsApplying(true);
 
-    // Initialize results UI
     const initialResults = enabledList.map(a => ({
       nickname: a.nickname || a.username,
       username: a.username,
-      status: 'pending',
+      status: 'applying',
       error: null,
     }));
     setResults(initialResults);
 
-    const stats = { applied: 0, alreadyApplied: 0, errors: 0 };
+    try {
+      const payload = {
+        companyShareId: getIssueId(selectedIssue, null),
+        appliedKitta: kitcount,
+        accounts: enabledList.map(a => ({
+          clientId: parseInt(a.dpId),
+          username: a.username,
+          password: decrypt(a.encryptedPassword || a.password),
+          pin: decrypt(a.encryptedPin || a.pin),
+          nickname: a.nickname || a.username,
+          crnNumber: a.crnNumber,
+        })),
+      };
 
-    for (let i = 0; i < enabledList.length; i++) {
-      const acc = enabledList[i];
-      const label = acc.nickname || acc.username;
-
-      // Update UI: Current account is "applying"
-      setResults(prev => {
-        const next = [...prev];
-        next[i] = { ...next[i], status: 'applying' };
-        return next;
+      const res = await fetch(`${getApiBaseUrl()}/meroshare/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
 
-      try {
-        // 1. Login
-        const password = decrypt(acc.encryptedPassword);
-        const token = await MeroShareApi.login(acc.dpId, acc.username, password);
-
-        if (!token) throw new Error('Login failed');
-
-        // 2. Fetch missing details (BOID, CustomerId, BankId, etc.)
-        // We do this every time to ensure we have the correct 16-digit BOID for apply
-        const details = await MeroShareApi.fetchDetails(token, acc.username);
-        if (!details) throw new Error('Failed to fetch account details');
-
-        // PRE-CHECK: Check active applications to see if already applied
-        const activeApps = await MeroShareApi.fetchActiveApplications(token);
-        const issueIdStr = (selectedIssue.companyShareId || selectedIssue.id).toString();
-        const alreadyAppliedApp = activeApps.find(app => app.companyShareId?.toString() === issueIdStr);
-
-        if (alreadyAppliedApp && ['BLOCKED_APPROVE', 'VERIFIED', 'TRANSACTION_SUCCESS'].includes(alreadyAppliedApp.statusName)) {
-          stats.alreadyApplied++;
-          setResults(prev => {
-            const next = [...prev];
-            next[i] = { ...next[i], status: 'already-applied' };
-            return next;
-          });
-          await MeroShareApi.logout(token);
-          setSummary({ ...stats });
-          continue; // Skip the apply call
-        }
-
-        // 3. Apply
-        const applyRes = await MeroShareApi.apply(token, {
-          demat: details.dmat,
-          boid: details.dmat.slice(-8), // MeroShare requires last 8 digits only
-          accountNumber: details.accountNumber,
-          customerId: details.customerId,
-          accountBranchId: details.branchId,
-          accountTypeId: details.accountTypeId,
-          appliedKitta: kitcount.toString(),
-          crnNumber: acc.crnNumber,
-          transactionPIN: decrypt(acc.encryptedPin),
-          companyShareId: (selectedIssue.companyShareId || selectedIssue.id).toString(),
-          bankId: details.bankId,
-        });
-
-        // 4. Update status based on response
-        if (applyRes.success) {
-          stats.applied++;
-          setResults(prev => {
-            const next = [...prev];
-            next[i] = { ...next[i], status: 'applied' };
-            return next;
-          });
-        } else {
-          const msg = applyRes.message || '';
-          const msgLower = msg.toLowerCase();
-          if (msgLower.includes('already applied') || msgLower.includes('already been applied') || msgLower.includes('application in progress')) {
-            stats.alreadyApplied++;
-            setResults(prev => {
-              const next = [...prev];
-              next[i] = { ...next[i], status: 'already-applied' };
-              return next;
-            });
-          } else {
-            throw new Error(msg);
-          }
-        }
-
-        await MeroShareApi.logout(token);
-      } catch (err) {
-        stats.errors++;
-        setResults(prev => {
-          const next = [...prev];
-          next[i] = { ...next[i], status: 'error', error: err.message };
-          return next;
-        });
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Bulk apply failed');
       }
 
-      // Update summary live
-      setSummary({ ...stats });
-
-      // Safety delay between accounts (except for the last one)
-      if (i < enabledList.length - 1) {
-        await new Promise(r => setTimeout(r, 1500));
-      }
+      const serverResults = Array.isArray(data.results) ? data.results : [];
+      setResults(enabledList.map(account => {
+        const match = serverResults.find(result => result.username === account.username);
+        return {
+          nickname: match?.nickname || account.nickname || account.username,
+          username: account.username,
+          status: match?.status || (match?.success ? 'applied' : 'error'),
+          error: match?.error || null,
+        };
+      }));
+      setSummary(data.summary || {
+        applied: serverResults.filter(r => r.status === 'applied').length,
+        alreadyApplied: serverResults.filter(r => r.status === 'already-applied').length,
+        errors: serverResults.filter(r => r.status === 'error').length,
+      });
+    } catch (err) {
+      setResults(enabledList.map(account => ({
+        nickname: account.nickname || account.username,
+        username: account.username,
+        status: 'error',
+        error: err.message,
+      })));
+      setSummary({ applied: 0, alreadyApplied: 0, errors: enabledList.length });
+      Toast.show({ type: 'error', text1: 'Bulk apply failed', text2: err.message });
+    } finally {
+      setIsApplying(false);
     }
-
-    setIsApplying(false);
   };
 
   const handleCheckStatus = async () => {
@@ -426,8 +377,10 @@ export default function BulkApplyPanel({ initialIssue, onClose }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="send-circle" size={22} color="#4CAF50" />
-          <Text style={styles.headerTitle}>Bulk Action Manager</Text>
+          <View style={styles.headerIcon}>
+            <Ionicons name="briefcase" size={18} color={COLORS.text} />
+          </View>
+          <Text style={styles.headerTitle}>IPO Apply Center</Text>
         </View>
       </View>
 
@@ -751,6 +704,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.primary },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.surface, paddingHorizontal: 16, paddingVertical: 14 },
   headerTitle: { color: '#fff', fontWeight: 'bold', fontSize: 18, marginLeft: 8 },
+  headerIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accent, borderWidth: 1, borderColor: COLORS.border },
   closeBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
   sectionLabel: { fontSize: 11, fontWeight: '900', color: COLORS.mutedText, letterSpacing: 1, marginBottom: 8, marginTop: 16 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
