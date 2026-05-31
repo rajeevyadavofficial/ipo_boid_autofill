@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, ActivityIndicator, Platform,
@@ -179,6 +179,9 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
   const [showPin, setShowPin] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState(null); // null, 'verifying', 'success', 'error'
   const [isVerifying, setIsVerifying] = useState(false);
+  const updateFormField = useCallback((field, value) => {
+    setForm(prev => (prev[field] === value ? prev : { ...prev, [field]: value }));
+  }, []);
 
   useEffect(() => {
     loadMerShareAccounts().then(setAccounts);
@@ -348,7 +351,7 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.container}>
         {!embedded && (
           <>
@@ -360,7 +363,12 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
 
 
         {showForm ? (
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 40) }}>
+          <ScrollView
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="none"
+            removeClippedSubviews={false}
+            contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 40) }}
+          >
             <View style={styles.securityAlert}>
               <Ionicons name="shield-checkmark" size={20} color="#2196F3" />
               <Text style={styles.securityAlertText}>
@@ -371,7 +379,11 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
 
             <Text style={styles.label}>Nickname (optional)</Text>
             <TextInput style={styles.input} placeholder="e.g. Dad's Account"
-              value={form.nickname} onChangeText={v => setForm(p => ({ ...p, nickname: v }))} />
+              value={form.nickname}
+              onChangeText={v => updateFormField('nickname', v)}
+              placeholderTextColor={COLORS.mutedText}
+              autoCorrect={false}
+              spellCheck={false} />
 
             <Text style={styles.label}>Depository Participant *</Text>
             <TouchableOpacity style={styles.dpBtn} onPress={() => setShowDpPicker(true)}>
@@ -383,16 +395,29 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
 
             <Text style={styles.label}>Username *</Text>
             <TextInput style={styles.input} placeholder="MeroShare username"
-              value={form.username} onChangeText={v => setForm(p => ({ ...p, username: v }))}
-              autoCapitalize="none" />
+              value={form.username}
+              onChangeText={v => updateFormField('username', v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              placeholderTextColor={COLORS.mutedText}
+              textContentType="username"
+              autoComplete="username" />
 
             <Text style={styles.label}>Password *</Text>
             <View style={styles.inputRow}>
               <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]}
                 placeholder="MeroShare password"
                 secureTextEntry={!showPassword}
-                value={form.password} onChangeText={v => setForm(p => ({ ...p, password: v }))}
-                autoCapitalize="none" />
+                value={form.password}
+                onChangeText={v => updateFormField('password', v)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                placeholderTextColor={COLORS.mutedText}
+                textContentType="password"
+                autoComplete="password"
+                importantForAutofill="no" />
               <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={styles.eyeBtn}>
                 <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#666" />
               </TouchableOpacity>
@@ -405,7 +430,12 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
                 secureTextEntry={!showPin}
                 keyboardType="number-pad"
                 maxLength={4}
-                value={form.pin} onChangeText={v => setForm(p => ({ ...p, pin: v }))} />
+                value={form.pin}
+                onChangeText={v => updateFormField('pin', v.replace(/\D/g, '').slice(0, 4))}
+                placeholderTextColor={COLORS.mutedText}
+                textContentType="none"
+                autoComplete="off"
+                importantForAutofill="no" />
               <TouchableOpacity onPress={() => setShowPin(p => !p)} style={styles.eyeBtn}>
                 <Ionicons name={showPin ? 'eye-off' : 'eye'} size={20} color="#666" />
               </TouchableOpacity>
@@ -413,8 +443,15 @@ export default function MerShareAccountModal({ onClose, embedded = false, onAcco
 
             <Text style={styles.label}>CRN Number *</Text>
             <TextInput style={styles.input} placeholder="Enter your CRN number"
-              value={form.crnNumber} onChangeText={v => setForm(p => ({ ...p, crnNumber: v }))}
-              autoCapitalize="characters" />
+              value={form.crnNumber}
+              onChangeText={v => updateFormField('crnNumber', v.toUpperCase())}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              spellCheck={false}
+              placeholderTextColor={COLORS.mutedText}
+              textContentType="none"
+              autoComplete="off"
+              importantForAutofill="no" />
 
             <View style={styles.encryptNotice}>
               <Ionicons name="lock-closed" size={13} color="#4CAF50" />

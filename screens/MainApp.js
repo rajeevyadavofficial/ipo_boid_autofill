@@ -22,8 +22,8 @@ import { useBoidSync } from '../hooks/useBoidSync';
 
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
-const CURRENT_VERSION = '1.0.10';
-const CURRENT_VERSION_CODE = 20;
+const CURRENT_VERSION = '1.0.11';
+const CURRENT_VERSION_CODE = 21;
 
 const compareVersionNames = (left = '0.0.0', right = '0.0.0') => {
   const a = String(left).split('.').map(part => parseInt(part, 10) || 0);
